@@ -336,8 +336,17 @@ class MainWindow(QMainWindow):
         <p><b>IP:</b> {device.ip}</p>
         <p><b>MAC:</b> {device.mac}</p>
         <p><b>Hostname:</b> {device.hostname or "Desconocido"}</p>
+        
+        <h3>Información de Fabricante</h3>
         <p><b>Fabricante:</b> {device.vendor or "Desconocido"}</p>
+        <p><b>Detalles de fabricante:</b> {device.vendor_details or "Desconocido"}</p>
+        
+        <h3>Identificación del Dispositivo</h3>
+        <p><b>Tipo de dispositivo:</b> {device.device_type or "Desconocido"}</p>
+        <p><b>Modelo específico:</b> {device.model or "Desconocido"}</p>
         <p><b>Sistema Operativo:</b> {device.os or "Desconocido"}</p>
+        
+        <h3>Estado</h3>
         <p><b>Estado:</b> {device.status}</p>
         <p><b>Bloqueado:</b> {"Sí" if device.blocked else "No"}</p>
         <p><b>Última actividad:</b> {time.strftime('%H:%M:%S', time.localtime(device.last_seen))}</p>
@@ -366,7 +375,7 @@ class MainWindow(QMainWindow):
                 details += f"<p><b>Estado:</b> {'Activo' if info.get('active', False) else 'Inactivo'}</p>"
         
         self.details_text.setHtml(details)
-    
+
     def _on_device_selected(self, index):
         """Manejador para cuando se selecciona un dispositivo en la tabla"""
         row = index.row()

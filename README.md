@@ -16,6 +16,50 @@ Expulsor es una herramienta de seguridad de red que permite escanear, monitorear
 ### Prerequisitos
 - Python 3.8+
 - Poetry
+- Nmap (requerido para escaneo de puertos y detección de servicios)
+- Privilegios de administrador/root (requerido para ARP spoofing y manipulación de paquetes)
+
+### Instalación de Nmap
+
+Nmap es una herramienta esencial para Expulsor ya que permite realizar escaneo avanzado de puertos y detección de servicios. A continuación se detallan las instrucciones para instalar Nmap en diferentes sistemas operativos:
+
+#### Linux
+En distribuciones basadas en Debian/Ubuntu:
+```bash
+sudo apt update
+sudo apt install nmap
+```
+
+En distribuciones basadas en Red Hat/Fedora:
+```bash
+sudo dnf install nmap
+```
+
+En distribuciones basadas en Arch:
+```bash
+sudo pacman -S nmap
+```
+
+#### macOS
+Usando Homebrew:
+```bash
+brew install nmap
+```
+
+O usando MacPorts:
+```bash
+sudo port install nmap
+```
+
+#### Windows
+1. Descargar el instalador desde la [página oficial de Nmap](https://nmap.org/download.html)
+2. Ejecutar el instalador y seguir las instrucciones en pantalla
+3. Asegurarse de que la opción para instalar Npcap esté seleccionada durante la instalación
+
+Para verificar que Nmap está correctamente instalado, ejecute en una terminal:
+```bash
+nmap --version
+```
 
 ### Pasos de Instalación
 
@@ -30,10 +74,12 @@ cd expulsor
 poetry install
 ```
 
-3. Inicia la aplicación:
+3. Inicia la aplicación (con privilegios de administrador/root):
 ```bash
-poetry run expulsor
+sudo poetry run expulsor
 ```
+
+**Nota**: Expulsor requiere privilegios de administrador/root para funcionar correctamente debido a las operaciones de bajo nivel que realiza (ARP spoofing, escaneo de puertos, etc.). Asegúrate de ejecutar la aplicación con permisos elevados.
 
 ## Uso
 
@@ -42,6 +88,7 @@ poetry run expulsor
 3. Selecciona cualquier dispositivo de la lista para ver información detallada.
 4. Para restringir el acceso a internet de un dispositivo, selecciónalo y haz clic en "Bloquear Acceso".
 5. Para restaurar el acceso, haz clic en "Restaurar Acceso".
+6. Puedes configurar los modos de bloqueo (bloqueo real o solo monitorización) en el menú "Herramientas > Configurar Bloqueo".
 
 ## Consideraciones Éticas y Legales
 
@@ -53,10 +100,36 @@ Esta herramienta está diseñada con propósitos educativos y de seguridad para 
 
 El autor no se hace responsable del mal uso que se pueda dar a esta herramienta.
 
+## Resolución de Problemas
+
+### Problemas con el Bloqueo de Dispositivos
+Si los dispositivos continúan teniendo acceso a internet después de intentar bloquearlos:
+
+1. Verifica que estés ejecutando Expulsor con privilegios de administrador/root
+2. Asegúrate de que el "Modo de Bloqueo" esté activado en "Herramientas > Configurar Bloqueo"
+3. Comprueba que el reenvío de IP esté correctamente deshabilitado durante el bloqueo
+4. En algunos routers o dispositivos con protección avanzada, es posible que el ARP spoofing no sea efectivo
+
+### Problemas con el Escaneo de Red
+Si el escaneo de red no detecta todos los dispositivos o no muestra información detallada:
+
+1. Verifica que Nmap esté correctamente instalado ejecutando `nmap --version` en una terminal
+2. Asegúrate de que la aplicación tenga los permisos necesarios para realizar escaneos
+
 ## Tecnologías Utilizadas
 
 - **Scapy**: Para la manipulación de paquetes y comunicación de red
 - **PyQt6**: Para la interfaz gráfica de usuario
-- **Poetry**: Para la gestión de dependencias y entorno virtual
+- **Nmap**: Herramienta fundamental para el escaneo avanzado de puertos, detección de servicios y fingerprinting de sistemas operativos
 - **netifaces**: Para obtener información de las interfaces de red
-- **python-nmap**: Para escaneo avanzado de puertos y servicios
+- **Poetry**: Para la gestión de dependencias y entorno virtual
+
+## Contribución
+
+Las contribuciones son bienvenidas. Si deseas mejorar Expulsor, por favor sigue estos pasos:
+
+1. Haz fork del repositorio
+2. Crea una rama para tu funcionalidad (`git checkout -b feature/nueva-funcionalidad`)
+3. Realiza tus cambios y haz commit (`git commit -am 'Añade nueva funcionalidad'`)
+4. Haz push a la rama (`git push origin feature/nueva-funcionalidad`)
+5. Crea un Pull Request
