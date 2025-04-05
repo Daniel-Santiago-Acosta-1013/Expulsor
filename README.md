@@ -21,7 +21,7 @@ Expulsor es una herramienta de seguridad de red que permite escanear, monitorear
 
 1. Clona el repositorio:
 ```bash
-git clone https://github.com/tu-usuario/expulsor.git
+git clone git@github.com:Daniel-Santiago-Acosta-1013/Expulsor.git
 cd expulsor
 ```
 
