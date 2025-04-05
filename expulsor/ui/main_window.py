@@ -4,7 +4,7 @@ Ventana principal de la aplicación Expulsor
 
 import time
 
-from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtCore import Qt, QTimer, pyqtSlot, pyqtSignal, QObject
 from PyQt6.QtWidgets import (QHBoxLayout, QMainWindow, 
                             QMessageBox, QPushButton, QSplitter, QTabWidget, 
                             QTableView, QTextEdit, QVBoxLayout, QWidget)
@@ -13,6 +13,10 @@ from ..network_scanner import DeviceInfo, NetworkScanner
 from ..arp_spoofer import ARPSpoofer
 from .device_model import DeviceTableModel
 
+
+class SpooferSignals(QObject):
+    """Clase de señales para comunicación segura entre hilos"""
+    status_update = pyqtSignal(str, str, bool)
 
 class MainWindow(QMainWindow):
     """Ventana principal de la aplicación Expulsor"""
@@ -24,11 +28,11 @@ class MainWindow(QMainWindow):
         self.scanner = NetworkScanner()
         self.spoofer = None  # Se inicializará después de obtener la puerta de enlace
         self.device_model = DeviceTableModel()
-        
-        # Configurar la información de red en el modelo
-        self.device_model.set_network_info(self.scanner.gateway_ip, self.scanner.local_ip)
-        
         self.selected_device = None
+        
+        # Inicializar señales para comunicación segura entre hilos
+        self.spoofer_signals = SpooferSignals()
+        self.spoofer_signals.status_update.connect(self._on_spoofer_status_safe)
         
         # Configurar la ventana
         self.setWindowTitle("Expulsor - Control de Red")
@@ -49,7 +53,7 @@ class MainWindow(QMainWindow):
                 self.scanner.gateway_mac,
                 self.scanner.local_mac
             )
-            self.spoofer.set_status_callback(self._on_spoofer_status)
+            self.spoofer.set_status_callback(self._emit_spoofer_status)
             self.log(f"Información de red obtenida: Gateway {self.scanner.gateway_ip} ({self.scanner.gateway_mac})")
         else:
             self.log("⚠️ No se pudo obtener información de red. Algunas funciones no estarán disponibles.", error=True)
@@ -327,8 +331,13 @@ class MainWindow(QMainWindow):
         else:
             self.log(f"No se pudo restaurar el acceso para {self.selected_device.ip}", error=True)
     
-    def _on_spoofer_status(self, ip: str, message: str, success: bool):
-        """Callback para mensajes de estado del spoofer"""
+    def _emit_spoofer_status(self, ip: str, message: str, success: bool):
+        """Emite la señal desde el hilo secundario al hilo principal"""
+        self.spoofer_signals.status_update.emit(ip, message, success)
+    
+    @pyqtSlot(str, str, bool)
+    def _on_spoofer_status_safe(self, ip: str, message: str, success: bool):
+        """Callback para mensajes de estado del spoofer (seguro para hilos)"""
         self.log(f"[ARP Spoofer] {ip}: {message}", not success)
         
         # Actualizar UI si es necesario
