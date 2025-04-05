@@ -3,11 +3,15 @@ Ventana principal de la aplicación Expulsor
 """
 
 import time
+import platform
 
 from PyQt6.QtCore import Qt, QTimer, pyqtSlot, pyqtSignal, QObject
-from PyQt6.QtWidgets import (QHBoxLayout, QMainWindow, 
+from PyQt6.QtGui import QAction
+from PyQt6.QtWidgets import (QHBoxLayout, QLabel, QMainWindow, 
                             QMessageBox, QPushButton, QSplitter, QTabWidget, 
-                            QTableView, QTextEdit, QVBoxLayout, QWidget)
+                            QTableView, QTextEdit, QVBoxLayout, QWidget,
+                            QCheckBox, QDoubleSpinBox,
+                            QDialog, QGridLayout)
 
 from ..network_scanner import DeviceInfo, NetworkScanner
 from ..arp_spoofer import ARPSpoofer
@@ -17,6 +21,56 @@ from .device_model import DeviceTableModel
 class SpooferSignals(QObject):
     """Clase de señales para comunicación segura entre hilos"""
     status_update = pyqtSignal(str, str, bool)
+
+
+class AgressiveModeDialog(QDialog):
+    """Diálogo para configurar el modo agresivo"""
+    
+    def __init__(self, parent=None, current_rate=0.5, aggressive_enabled=True):
+        super().__init__(parent)
+        self.setWindowTitle("Configuración del Modo Agresivo")
+        self.setMinimumWidth(400)
+        
+        # Valores iniciales
+        self.packet_rate = current_rate
+        self.aggressive_mode = aggressive_enabled
+        
+        # Layout principal
+        layout = QGridLayout(self)
+        
+        # Modo agresivo
+        self.aggressive_checkbox = QCheckBox("Activar modo agresivo", self)
+        self.aggressive_checkbox.setChecked(aggressive_enabled)
+        self.aggressive_checkbox.setToolTip("Activa técnicas adicionales para un bloqueo más efectivo")
+        layout.addWidget(self.aggressive_checkbox, 0, 0, 1, 2)
+        
+        # Frecuencia de paquetes
+        layout.addWidget(QLabel("Frecuencia de paquetes (segundos):"), 1, 0)
+        self.rate_spinner = QDoubleSpinBox(self)
+        self.rate_spinner.setRange(0.1, 5.0)
+        self.rate_spinner.setSingleStep(0.1)
+        self.rate_spinner.setValue(current_rate)
+        self.rate_spinner.setToolTip("Intervalo entre envíos de paquetes ARP. Valores más bajos son más agresivos")
+        layout.addWidget(self.rate_spinner, 1, 1)
+        
+        # Botones
+        self.ok_button = QPushButton("Aceptar", self)
+        self.ok_button.clicked.connect(self.accept)
+        self.cancel_button = QPushButton("Cancelar", self)
+        self.cancel_button.clicked.connect(self.reject)
+        
+        button_layout = QHBoxLayout()
+        button_layout.addWidget(self.ok_button)
+        button_layout.addWidget(self.cancel_button)
+        layout.addLayout(button_layout, 2, 0, 1, 2)
+    
+    def get_settings(self):
+        """Retorna la configuración seleccionada"""
+        return {
+            'aggressive_mode': self.aggressive_checkbox.isChecked(),
+            'packet_rate': self.rate_spinner.value()
+        }
+
 
 class MainWindow(QMainWindow):
     """Ventana principal de la aplicación Expulsor"""
@@ -40,11 +94,17 @@ class MainWindow(QMainWindow):
         
         # Inicializar la interfaz gráfica
         self._init_ui()
+        self._create_menu()
         
         # Inicializar temporizador para actualizaciones
         self.timer = QTimer(self)
         self.timer.timeout.connect(self._update_status)
         self.timer.start(10000)  # Actualizar cada 10 segundos
+        
+        # Temporizador para actualizar información de bloqueo
+        self.block_timer = QTimer(self)
+        self.block_timer.timeout.connect(self._update_block_info)
+        self.block_timer.start(2000)  # Actualizar cada 2 segundos
         
         # Inicializar el spoofer una vez que tengamos la información de red
         if self.scanner.gateway_ip and self.scanner.gateway_mac and self.scanner.local_mac:
@@ -57,6 +117,36 @@ class MainWindow(QMainWindow):
             self.log(f"Información de red obtenida: Gateway {self.scanner.gateway_ip} ({self.scanner.gateway_mac})")
         else:
             self.log("⚠️ No se pudo obtener información de red. Algunas funciones no estarán disponibles.", error=True)
+    
+    def _create_menu(self):
+        """Crea el menú de la aplicación"""
+        menu_bar = self.menuBar()
+        
+        # Menú Archivo
+        file_menu = menu_bar.addMenu("Archivo")
+        
+        exit_action = QAction("Salir", self)
+        exit_action.triggered.connect(self.close)
+        file_menu.addAction(exit_action)
+        
+        # Menú Herramientas
+        tools_menu = menu_bar.addMenu("Herramientas")
+        
+        scan_action = QAction("Escanear Red", self)
+        scan_action.triggered.connect(self._on_scan_clicked)
+        tools_menu.addAction(scan_action)
+        
+        # Configuración de bloqueo
+        block_config_action = QAction("Configurar Bloqueo", self)
+        block_config_action.triggered.connect(self._show_aggressive_config)
+        tools_menu.addAction(block_config_action)
+        
+        # Menú Ayuda
+        help_menu = menu_bar.addMenu("Ayuda")
+        
+        about_action = QAction("Acerca de", self)
+        about_action.triggered.connect(self._show_about)
+        help_menu.addAction(about_action)
     
     def _init_ui(self):
         """Inicializa la interfaz de usuario"""
@@ -131,9 +221,18 @@ class MainWindow(QMainWindow):
         self.log_text.setReadOnly(True)
         log_layout.addWidget(self.log_text)
         
+        # Pestaña de estado de bloqueo
+        self.block_widget = QWidget()
+        block_layout = QVBoxLayout(self.block_widget)
+        
+        self.block_text = QTextEdit()
+        self.block_text.setReadOnly(True)
+        block_layout.addWidget(self.block_text)
+        
         # Añadir pestañas
         self.tab_widget.addTab(self.details_widget, "Detalles")
         self.tab_widget.addTab(self.log_widget, "Log")
+        self.tab_widget.addTab(self.block_widget, "Estado de Bloqueo")
         
         right_layout.addWidget(self.tab_widget)
         
@@ -147,6 +246,7 @@ class MainWindow(QMainWindow):
         
         # Log inicial
         self.log("Aplicación iniciada")
+        self.log(f"Sistema: {platform.system()} {platform.release()}")
         self.log(f"IP local: {self.scanner.local_ip} | MAC: {self.scanner.local_mac}")
         self.log(f"Gateway: {self.scanner.gateway_ip} | MAC: {self.scanner.gateway_mac}")
     
@@ -171,6 +271,49 @@ class MainWindow(QMainWindow):
                 on_scan_complete=self._on_scan_complete,
                 quick_scan=True
             )
+    
+    def _update_block_info(self):
+        """Actualiza la información de los dispositivos bloqueados"""
+        if not self.spoofer:
+            return
+            
+        targets = self.spoofer.get_all_targets()
+        if not targets:
+            self.block_text.setText("<h2>No hay dispositivos bloqueados actualmente</h2>")
+            return
+            
+        # Mostrar información
+        html = "<h2>Dispositivos con acceso restringido</h2>"
+        html += "<table width='100%' border='1' cellpadding='4' style='border-collapse: collapse;'>"
+        html += "<tr><th>IP</th><th>MAC</th><th>Tiempo activo</th><th>Estado</th></tr>"
+        
+        for ip, info in targets.items():
+            device = self.device_model.get_device_by_ip(ip)
+            hostname = device.hostname if device else "Desconocido"
+            duration = info.get('duration', 0)
+            
+            # Formatear duración
+            minutes, seconds = divmod(int(duration), 60)
+            hours, minutes = divmod(minutes, 60)
+            duration_str = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+            
+            # Fila con color según estado
+            bg_color = "#ffdddd" if info.get('active', False) else "#dddddd"
+            html += f"<tr style='background-color: {bg_color};'>"
+            html += f"<td>{ip} ({hostname})</td>"
+            html += f"<td>{info.get('mac', 'Desconocido')}</td>"
+            html += f"<td>{duration_str}</td>"
+            html += f"<td>{'Activo' if info.get('active', False) else 'Inactivo'}</td>"
+            html += "</tr>"
+            
+        html += "</table>"
+        
+        # Añadir información sobre configuración
+        html += "<h3>Configuración actual</h3>"
+        html += f"<p><b>Modo agresivo:</b> {'Activado' if self.spoofer.aggressive_mode else 'Desactivado'}</p>"
+        html += f"<p><b>Frecuencia de paquetes:</b> {self.spoofer.packet_rate} segundos</p>"
+        
+        self.block_text.setHtml(html)
     
     def _update_device_details(self, device: DeviceInfo):
         """Actualiza la visualización de detalles de un dispositivo"""
@@ -199,6 +342,19 @@ class MainWindow(QMainWindow):
             details += "</ul>"
         else:
             details += "<p><i>No hay información de puertos disponible</i></p>"
+        
+        # Si está bloqueado, mostrar información adicional
+        if device.blocked and self.spoofer:
+            targets = self.spoofer.get_all_targets()
+            if device.ip in targets:
+                info = targets[device.ip]
+                duration = info.get('duration', 0)
+                minutes, seconds = divmod(int(duration), 60)
+                hours, minutes = divmod(minutes, 60)
+                
+                details += f"<h3>Información de Bloqueo</h3>"
+                details += f"<p><b>Tiempo de bloqueo:</b> {hours:02d}:{minutes:02d}:{seconds:02d}</p>"
+                details += f"<p><b>Estado:</b> {'Activo' if info.get('active', False) else 'Inactivo'}</p>"
         
         self.details_text.setHtml(details)
     
@@ -267,6 +423,10 @@ class MainWindow(QMainWindow):
         if existing_device:
             device.blocked = existing_device.blocked
         
+        # Actualizar si está bloqueado según el spoofer
+        if self.spoofer and self.spoofer.is_spoofing(device.ip):
+            device.blocked = True
+        
         # Actualizar modelo
         self.device_model.update_device(device)
         
@@ -285,6 +445,26 @@ class MainWindow(QMainWindow):
         else:
             self.log(f"Error en el escaneo: {message}", error=True)
     
+    def _show_aggressive_config(self):
+        """Muestra el diálogo de configuración de modo agresivo"""
+        if not self.spoofer:
+            QMessageBox.warning(self, "Error", "El módulo de spoofing no está inicializado")
+            return
+            
+        dialog = AgressiveModeDialog(
+            self, 
+            current_rate=self.spoofer.packet_rate,
+            aggressive_enabled=self.spoofer.aggressive_mode
+        )
+        
+        if dialog.exec():
+            settings = dialog.get_settings()
+            self.spoofer.set_aggressive_mode(settings['aggressive_mode'])
+            self.spoofer.set_packet_rate(settings['packet_rate'])
+            
+            self.log(f"Configuración actualizada: Modo agresivo = {settings['aggressive_mode']}, " +
+                    f"Frecuencia = {settings['packet_rate']} segundos")
+    
     def _on_block_clicked(self):
         """Manejador para el botón de bloqueo"""
         if not self.selected_device or not self.spoofer:
@@ -296,6 +476,9 @@ class MainWindow(QMainWindow):
                                     QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
         
         if reply == QMessageBox.StandardButton.Yes:
+            # Cambiar a la pestaña de estado de bloqueo
+            self.tab_widget.setCurrentIndex(2)
+            
             # Iniciar spoofing
             success = self.spoofer.start_spoofing(self.selected_device.ip)
             
@@ -352,18 +535,32 @@ class MainWindow(QMainWindow):
                 self.block_button.setEnabled(not device.blocked)
                 self.unblock_button.setEnabled(device.blocked)
     
+    def _show_about(self):
+        """Muestra el diálogo de Acerca de"""
+        about_text = """
+        <h1>Expulsor</h1>
+        <p>Versión 1.0.0</p>
+        <p>Herramienta avanzada de gestión y control de red con capacidades de escaneo y restricción de dispositivos.</p>
+        <p>Desarrollado como una mejora de PinguExit, con técnicas avanzadas de ARP Spoofing.</p>
+        <p><b>Nota:</b> Esta herramienta debe utilizarse únicamente en entornos controlados y con fines educativos.</p>
+        """
+        
+        QMessageBox.about(self, "Acerca de Expulsor", about_text)
+    
     def closeEvent(self, event):
         """Manejador para el cierre de la ventana"""
         # Detener todos los ataques en curso
         if self.spoofer:
+            self.log("Deteniendo todos los bloqueos activos...")
             self.spoofer.stop_all()
         
         # Detener escáner si está en curso
         if self.scanner.scanning:
             self.scanner.stop_scan()
         
-        # Detener timer
+        # Detener timers
         self.timer.stop()
+        self.block_timer.stop()
         
         # Continuar con el cierre
         super().closeEvent(event)
