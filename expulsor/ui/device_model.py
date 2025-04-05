@@ -14,6 +14,13 @@ class DeviceTableModel(QAbstractTableModel):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.devices = []
+        self.gateway_ip = None
+        self.local_ip = None
+    
+    def set_network_info(self, gateway_ip, local_ip):
+        """Establece la información de red para las comparaciones"""
+        self.gateway_ip = gateway_ip
+        self.local_ip = local_ip
     
     def rowCount(self, parent=QModelIndex()):
         """Retorna el número de filas"""
@@ -51,9 +58,9 @@ class DeviceTableModel(QAbstractTableModel):
                 return QColor(255, 200, 200)  # Rojo claro para bloqueados
             elif device.status == "inactivo":
                 return QColor(230, 230, 230)  # Gris para inactivos
-            elif device.ip == device.gateway_ip:
+            elif self.gateway_ip and device.ip == self.gateway_ip:
                 return QColor(220, 240, 255)  # Azul claro para la puerta de enlace
-            elif device.ip == device.local_ip:
+            elif self.local_ip and device.ip == self.local_ip:
                 return QColor(220, 255, 220)  # Verde claro para este dispositivo
         
         elif role == Qt.ItemDataRole.TextAlignmentRole:

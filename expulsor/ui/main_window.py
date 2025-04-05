@@ -24,6 +24,10 @@ class MainWindow(QMainWindow):
         self.scanner = NetworkScanner()
         self.spoofer = None  # Se inicializará después de obtener la puerta de enlace
         self.device_model = DeviceTableModel()
+        
+        # Configurar la información de red en el modelo
+        self.device_model.set_network_info(self.scanner.gateway_ip, self.scanner.local_ip)
+        
         self.selected_device = None
         
         # Configurar la ventana
