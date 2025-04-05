@@ -26,7 +26,7 @@ class SpooferSignals(QObject):
 class AgressiveModeDialog(QDialog):
     """Diálogo para configurar el modo agresivo"""
     
-    def __init__(self, parent=None, current_rate=0.5, aggressive_enabled=True):
+    def __init__(self, parent=None, current_rate=0.5, aggressive_enabled=True, block_enabled=True):
         super().__init__(parent)
         self.setWindowTitle("Configuración del Modo Agresivo")
         self.setMinimumWidth(400)
@@ -34,6 +34,7 @@ class AgressiveModeDialog(QDialog):
         # Valores iniciales
         self.packet_rate = current_rate
         self.aggressive_mode = aggressive_enabled
+        self.block_mode = block_enabled
         
         # Layout principal
         layout = QGridLayout(self)
@@ -44,14 +45,20 @@ class AgressiveModeDialog(QDialog):
         self.aggressive_checkbox.setToolTip("Activa técnicas adicionales para un bloqueo más efectivo")
         layout.addWidget(self.aggressive_checkbox, 0, 0, 1, 2)
         
+        # Modo de bloqueo
+        self.block_checkbox = QCheckBox("Bloquear tráfico (desactivar reenvío de IP)", self)
+        self.block_checkbox.setChecked(block_enabled)
+        self.block_checkbox.setToolTip("Si está activado, bloquea realmente el tráfico. Si está desactivado, solo monitoriza")
+        layout.addWidget(self.block_checkbox, 1, 0, 1, 2)
+        
         # Frecuencia de paquetes
-        layout.addWidget(QLabel("Frecuencia de paquetes (segundos):"), 1, 0)
+        layout.addWidget(QLabel("Frecuencia de paquetes (segundos):"), 2, 0)
         self.rate_spinner = QDoubleSpinBox(self)
         self.rate_spinner.setRange(0.1, 5.0)
         self.rate_spinner.setSingleStep(0.1)
         self.rate_spinner.setValue(current_rate)
         self.rate_spinner.setToolTip("Intervalo entre envíos de paquetes ARP. Valores más bajos son más agresivos")
-        layout.addWidget(self.rate_spinner, 1, 1)
+        layout.addWidget(self.rate_spinner, 2, 1)
         
         # Botones
         self.ok_button = QPushButton("Aceptar", self)
@@ -62,15 +69,15 @@ class AgressiveModeDialog(QDialog):
         button_layout = QHBoxLayout()
         button_layout.addWidget(self.ok_button)
         button_layout.addWidget(self.cancel_button)
-        layout.addLayout(button_layout, 2, 0, 1, 2)
+        layout.addLayout(button_layout, 3, 0, 1, 2)
     
     def get_settings(self):
         """Retorna la configuración seleccionada"""
         return {
             'aggressive_mode': self.aggressive_checkbox.isChecked(),
+            'block_mode': self.block_checkbox.isChecked(),
             'packet_rate': self.rate_spinner.value()
         }
-
 
 class MainWindow(QMainWindow):
     """Ventana principal de la aplicación Expulsor"""
@@ -285,7 +292,7 @@ class MainWindow(QMainWindow):
         # Mostrar información
         html = "<h2>Dispositivos con acceso restringido</h2>"
         html += "<table width='100%' border='1' cellpadding='4' style='border-collapse: collapse;'>"
-        html += "<tr><th>IP</th><th>MAC</th><th>Tiempo activo</th><th>Estado</th></tr>"
+        html += "<tr><th>IP</th><th>MAC</th><th>Tiempo activo</th><th>Estado</th><th>Modo</th></tr>"
         
         for ip, info in targets.items():
             device = self.device_model.get_device_by_ip(ip)
@@ -304,6 +311,7 @@ class MainWindow(QMainWindow):
             html += f"<td>{info.get('mac', 'Desconocido')}</td>"
             html += f"<td>{duration_str}</td>"
             html += f"<td>{'Activo' if info.get('active', False) else 'Inactivo'}</td>"
+            html += f"<td>{'Bloqueo' if info.get('block_mode', False) else 'Monitorización'}</td>"
             html += "</tr>"
             
         html += "</table>"
@@ -311,6 +319,7 @@ class MainWindow(QMainWindow):
         # Añadir información sobre configuración
         html += "<h3>Configuración actual</h3>"
         html += f"<p><b>Modo agresivo:</b> {'Activado' if self.spoofer.aggressive_mode else 'Desactivado'}</p>"
+        html += f"<p><b>Modo de bloqueo:</b> {'Activado (bloqueo real)' if self.spoofer.block_mode else 'Desactivado (solo monitorización)'}</p>"
         html += f"<p><b>Frecuencia de paquetes:</b> {self.spoofer.packet_rate} segundos</p>"
         
         self.block_text.setHtml(html)
@@ -454,17 +463,20 @@ class MainWindow(QMainWindow):
         dialog = AgressiveModeDialog(
             self, 
             current_rate=self.spoofer.packet_rate,
-            aggressive_enabled=self.spoofer.aggressive_mode
+            aggressive_enabled=self.spoofer.aggressive_mode,
+            block_enabled=self.spoofer.block_mode
         )
         
         if dialog.exec():
             settings = dialog.get_settings()
             self.spoofer.set_aggressive_mode(settings['aggressive_mode'])
+            self.spoofer.set_block_mode(settings['block_mode'])
             self.spoofer.set_packet_rate(settings['packet_rate'])
             
             self.log(f"Configuración actualizada: Modo agresivo = {settings['aggressive_mode']}, " +
+                    f"Modo bloqueo = {settings['block_mode']}, " +
                     f"Frecuencia = {settings['packet_rate']} segundos")
-    
+
     def _on_block_clicked(self):
         """Manejador para el botón de bloqueo"""
         if not self.selected_device or not self.spoofer:

