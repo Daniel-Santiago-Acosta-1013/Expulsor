@@ -1,0 +1,26 @@
+[tool.poetry]
+name = "expulsor"
+version = "1.0.0"
+description = "Herramienta avanzada de gestión y control de red con capacidades de escaneo y restricción de dispositivos"
+authors = ["Santiago Acosta <santiagoacosta1013@gmail.com>"]
+readme = "README.md"
+packages = [{include = "expulsor"}]
+
+[tool.poetry.dependencies]
+python = "^3.8"
+scapy = "^2.5.0"
+PyQt6 = "^6.4.0"
+netifaces = "^0.11.0"
+python-nmap = "^0.7.1"
+
+[tool.poetry.dev-dependencies]
+pytest = "^7.0.0"
+black = "^23.1.0"
+isort = "^5.12.0"
+
+[tool.poetry.scripts]
+expulsor = "expulsor.main:main"
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
