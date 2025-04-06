@@ -6,12 +6,12 @@ import time
 import platform
 
 from PyQt6.QtCore import Qt, QTimer, pyqtSlot, pyqtSignal, QObject
-from PyQt6.QtGui import QAction
+from PyQt6.QtGui import QAction, QCursor
 from PyQt6.QtWidgets import (QHBoxLayout, QLabel, QMainWindow, 
                             QMessageBox, QPushButton, QSplitter, QTabWidget, 
                             QTableView, QTextEdit, QVBoxLayout, QWidget,
-                            QCheckBox, QDoubleSpinBox,
-                            QDialog, QGridLayout)
+                            QCheckBox, QDoubleSpinBox, QMenu,
+                            QDialog, QGridLayout, QToolButton)
 
 from ..network_scanner import DeviceInfo, NetworkScanner
 from ..arp_spoofer import ARPSpoofer
@@ -152,9 +152,17 @@ class MainWindow(QMainWindow):
         # Menú Herramientas
         tools_menu = menu_bar.addMenu("Herramientas")
         
-        scan_action = QAction("Escanear Red", self)
-        scan_action.triggered.connect(self._on_scan_clicked)
-        tools_menu.addAction(scan_action)
+        # Submenú de escaneo
+        scan_menu = tools_menu.addMenu("Escanear Red")
+        
+        # Opciones de escaneo
+        scan_quick_action = QAction("Escaneo Rápido", self)
+        scan_quick_action.triggered.connect(self._on_quick_scan_clicked)
+        scan_menu.addAction(scan_quick_action)
+        
+        scan_deep_action = QAction("Escaneo Profundo", self)
+        scan_deep_action.triggered.connect(self._on_deep_scan_clicked)
+        scan_menu.addAction(scan_deep_action)
         
         # Configuración de bloqueo
         block_config_action = QAction("Configurar Bloqueo", self)
@@ -188,8 +196,31 @@ class MainWindow(QMainWindow):
         # Botones de control
         control_layout = QHBoxLayout()
         
-        self.scan_button = QPushButton("Escanear Red")
-        self.scan_button.clicked.connect(self._on_scan_clicked)
+        # Botón de escaneo con menú desplegable
+        self.scan_button = QToolButton()
+        self.scan_button.setText("Escanear")
+        self.scan_button.setPopupMode(QToolButton.ToolButtonPopupMode.MenuButtonPopup)
+        
+        # Crear menú de opciones de escaneo
+        scan_menu = QMenu()
+        
+        # Acción para escaneo rápido
+        scan_quick_action = QAction("Escaneo Rápido", self)
+        scan_quick_action.setToolTip("Realiza un escaneo básico para detectar dispositivos rápidamente")
+        scan_quick_action.triggered.connect(self._on_quick_scan_clicked)
+        scan_menu.addAction(scan_quick_action)
+        
+        # Acción para escaneo profundo
+        scan_deep_action = QAction("Escaneo Profundo", self)
+        scan_deep_action.setToolTip("Realiza un escaneo detallado de todos los dispositivos")
+        scan_deep_action.triggered.connect(self._on_deep_scan_clicked)
+        scan_menu.addAction(scan_deep_action)
+        
+        # Configurar el menú en el botón
+        self.scan_button.setMenu(scan_menu)
+        self.scan_button.setDefaultAction(scan_quick_action)
+        self.scan_button.clicked.connect(self._on_quick_scan_clicked)  # Acción por defecto
+        
         control_layout.addWidget(self.scan_button)
         
         self.block_button = QPushButton("Bloquear Acceso")
@@ -211,6 +242,9 @@ class MainWindow(QMainWindow):
         self.device_table.setSelectionMode(QTableView.SelectionMode.SingleSelection)
         self.device_table.clicked.connect(self._on_device_selected)
         self.device_table.doubleClicked.connect(self._on_device_details)
+        # Añadir menú contextual para escaneo individual
+        self.device_table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.device_table.customContextMenuRequested.connect(self._show_device_context_menu)
         
         # Ajustar ancho de columnas
         header = self.device_table.horizontalHeader()
@@ -269,6 +303,42 @@ class MainWindow(QMainWindow):
         self.log(f"Sistema: {platform.system()} {platform.release()}")
         self.log(f"IP local: {self.scanner.local_ip} | MAC: {self.scanner.local_mac}")
         self.log(f"Gateway: {self.scanner.gateway_ip} | MAC: {self.scanner.gateway_mac}")
+    
+    def _show_device_context_menu(self, pos):
+        """Muestra el menú contextual para un dispositivo"""
+        # Obtener el índice bajo el cursor
+        index = self.device_table.indexAt(pos)
+        if not index.isValid():
+            return
+            
+        # Obtener el dispositivo
+        device = self.device_model.get_device_at_row(index.row())
+        if not device:
+            return
+            
+        # Crear menú contextual
+        context_menu = QMenu(self)
+        
+        # Opción para escanear el dispositivo individualmente
+        scan_action = QAction("Escanear este dispositivo", self)
+        scan_action.triggered.connect(lambda: self._scan_specific_device(device.ip))
+        context_menu.addAction(scan_action)
+        
+        # Añadir opciones para bloquear/desbloquear
+        if device.blocked:
+            unblock_action = QAction("Restaurar acceso", self)
+            unblock_action.triggered.connect(lambda: self._unblock_device(device))
+            context_menu.addAction(unblock_action)
+        else:
+            block_action = QAction("Bloquear acceso", self)
+            block_action.triggered.connect(lambda: self._block_device(device))
+            # Deshabilitar para gateway y local
+            if device.ip == self.scanner.gateway_ip or device.ip == self.scanner.local_ip:
+                block_action.setEnabled(False)
+            context_menu.addAction(block_action)
+        
+        # Mostrar el menú contextual
+        context_menu.exec(QCursor.pos())
     
     def log(self, message: str, error: bool = False):
         """Añade un mensaje al log"""
@@ -411,18 +481,57 @@ class MainWindow(QMainWindow):
         # Cambiar a la pestaña de detalles
         self.tab_widget.setCurrentIndex(0)
     
-    def _on_scan_clicked(self):
-        """Manejador para el botón de escaneo"""
+    def _on_quick_scan_clicked(self):
+        """Manejador para el botón de escaneo rápido"""
         self.scan_button.setEnabled(False)
         self.scan_button.setText("Escaneando...")
-        self.log("Iniciando escaneo de red completo...")
+        self.log("Iniciando escaneo rápido de red...")
         
-        # Iniciar escaneo
+        # Iniciar escaneo rápido
+        self.scanner.scan_network(
+            self._emit_device_found,
+            self._emit_scan_complete,
+            quick_scan=True
+        )
+    
+    def _on_deep_scan_clicked(self):
+        """Manejador para el botón de escaneo profundo"""
+        self.scan_button.setEnabled(False)
+        self.scan_button.setText("Escaneando...")
+        self.log("Iniciando escaneo profundo de red...")
+        
+        # Iniciar escaneo profundo
         self.scanner.scan_network(
             self._emit_device_found,
             self._emit_scan_complete,
             quick_scan=False
         )
+    
+    def _scan_specific_device(self, ip):
+        """Escanea un dispositivo específico"""
+        if not ip or self.scanner.scanning:
+            return
+            
+        self.log(f"Iniciando escaneo específico del dispositivo {ip}...")
+        
+        # Cambiar a la pestaña de detalles
+        self.tab_widget.setCurrentIndex(0)
+        
+        # Deshabilitar botones de escaneo mientras se realiza
+        self.scan_button.setEnabled(False)
+        self.statusBar().showMessage(f"Escaneando dispositivo {ip}...")
+        
+        # Función de callback para cuando se complete el escaneo
+        def on_device_scanned(device):
+            # Emitir la señal para procesar de forma segura
+            self._emit_device_updated(device)
+            # Habilitar botones y actualizar estado
+            self.scan_button.setEnabled(True)
+            self.statusBar().showMessage(f"Escaneo de {ip} completado", 5000)
+            self.log(f"Escaneo específico del dispositivo {ip} completado")
+        
+        # Iniciar el escaneo específico
+        self.scanner.scan_specific_device(ip, on_device_scanned)
     
     # Métodos emisores de señales (desde hilos secundarios)
     def _emit_device_found(self, device: DeviceInfo):
@@ -486,7 +595,7 @@ class MainWindow(QMainWindow):
     def _on_scan_complete_safe(self, success: bool, message: str):
         """Slot seguro para manejar la señal scan_complete"""
         self.scan_button.setEnabled(True)
-        self.scan_button.setText("Escanear Red")
+        self.scan_button.setText("Escanear")
         
         if success:
             self.log(f"Escaneo completado: {len(self.scanner.get_all_devices())} dispositivos encontrados")
@@ -516,14 +625,14 @@ class MainWindow(QMainWindow):
                     f"Modo bloqueo = {settings['block_mode']}, " +
                     f"Frecuencia = {settings['packet_rate']} segundos")
 
-    def _on_block_clicked(self):
-        """Manejador para el botón de bloqueo"""
-        if not self.selected_device or not self.spoofer:
+    def _block_device(self, device):
+        """Bloquea un dispositivo específico"""
+        if not device or not self.spoofer:
             return
         
         # Confirmar con el usuario
         reply = QMessageBox.question(self, "Confirmar Bloqueo", 
-                                    f"¿Deseas bloquear el acceso a internet para {self.selected_device.ip}?",
+                                    f"¿Deseas bloquear el acceso a internet para {device.ip}?",
                                     QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
         
         if reply == QMessageBox.StandardButton.Yes:
@@ -531,39 +640,53 @@ class MainWindow(QMainWindow):
             self.tab_widget.setCurrentIndex(2)
             
             # Iniciar spoofing
-            success = self.spoofer.start_spoofing(self.selected_device.ip)
+            success = self.spoofer.start_spoofing(device.ip)
             
             if success:
-                self.log(f"Iniciando bloqueo para {self.selected_device.ip}")
-                self.selected_device.blocked = True
-                self.device_model.update_device(self.selected_device)
-                self._update_device_details(self.selected_device)
+                self.log(f"Iniciando bloqueo para {device.ip}")
+                device.blocked = True
+                self.device_model.update_device(device)
                 
-                # Actualizar botones
-                self.block_button.setEnabled(False)
-                self.unblock_button.setEnabled(True)
+                # Actualizar detalles si es el dispositivo seleccionado
+                if self.selected_device and device.ip == self.selected_device.ip:
+                    self.selected_device = device
+                    self._update_device_details(device)
+                    self.block_button.setEnabled(False)
+                    self.unblock_button.setEnabled(True)
             else:
-                self.log(f"No se pudo iniciar el bloqueo para {self.selected_device.ip}", error=True)
+                self.log(f"No se pudo iniciar el bloqueo para {device.ip}", error=True)
     
-    def _on_unblock_clicked(self):
-        """Manejador para el botón de desbloqueo"""
-        if not self.selected_device or not self.spoofer:
+    def _unblock_device(self, device):
+        """Desbloquea un dispositivo específico"""
+        if not device or not self.spoofer:
             return
         
         # Detener el spoofing
-        success = self.spoofer.stop_spoofing(self.selected_device.ip)
+        success = self.spoofer.stop_spoofing(device.ip)
         
         if success:
-            self.log(f"Restaurando acceso para {self.selected_device.ip}")
-            self.selected_device.blocked = False
-            self.device_model.update_device(self.selected_device)
-            self._update_device_details(self.selected_device)
+            self.log(f"Restaurando acceso para {device.ip}")
+            device.blocked = False
+            self.device_model.update_device(device)
             
-            # Actualizar botones
-            self.block_button.setEnabled(True)
-            self.unblock_button.setEnabled(False)
+            # Actualizar detalles si es el dispositivo seleccionado
+            if self.selected_device and device.ip == self.selected_device.ip:
+                self.selected_device = device
+                self._update_device_details(device)
+                self.block_button.setEnabled(True)
+                self.unblock_button.setEnabled(False)
         else:
-            self.log(f"No se pudo restaurar el acceso para {self.selected_device.ip}", error=True)
+            self.log(f"No se pudo restaurar el acceso para {device.ip}", error=True)
+    
+    def _on_block_clicked(self):
+        """Manejador para el botón de bloqueo"""
+        if self.selected_device:
+            self._block_device(self.selected_device)
+    
+    def _on_unblock_clicked(self):
+        """Manejador para el botón de desbloqueo"""
+        if self.selected_device:
+            self._unblock_device(self.selected_device)
     
     def _emit_spoofer_status(self, ip: str, message: str, success: bool):
         """Emite la señal desde el hilo secundario al hilo principal"""
