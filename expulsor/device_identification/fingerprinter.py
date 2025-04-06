@@ -72,8 +72,92 @@ class DeviceFingerprinter:
         self.headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
         }
+
+    def _scan_ports_extensive(self, ip: str) -> Tuple[List[int], Dict]:
+        """
+        Escanea un rango más amplio de puertos en un dispositivo para escaneos detallados
+        
+        Args:
+            ip: Dirección IP del dispositivo
+            
+        Returns:
+            Tuple[List[int], Dict]: Lista de puertos abiertos y diccionario de servicios
+        """
+        try:
+            # Usar nmap para escanear un rango más amplio de puertos
+            # Incluye los 1000 puertos más comunes y detección de versiones
+            result = self.nm.scan(
+                hosts=ip, 
+                arguments="-p 1-1000 -sV -T4 --max-retries=2 --host-timeout=60s"
+            )
+            
+            # Extraer puertos abiertos y servicios
+            open_ports = []
+            service_details = {}
+            
+            if ip in result['scan'] and 'tcp' in result['scan'][ip]:
+                for port, data in result['scan'][ip]['tcp'].items():
+                    if data['state'] == 'open':
+                        port_num = int(port)
+                        open_ports.append(port_num)
+                        
+                        # Extraer información de servicio
+                        service_name = data.get('name', '')
+                        product = data.get('product', '')
+                        version = data.get('version', '')
+                        extrainfo = data.get('extrainfo', '')
+                        
+                        service_details[port_num] = {
+                            'name': service_name,
+                            'product': product,
+                            'version': version,
+                            'extrainfo': extrainfo
+                        }
+            
+            return open_ports, service_details
+        except Exception as e:
+            logger.debug(f"Error escaneando puertos extensivamente para {ip}: {e}")
+        
+        return [], {}
     
-    def fingerprint_device(self, ip: str, mac: str = None, basic_info: Dict = None) -> Dict:
+
+    def _get_service_name(self, port: int) -> Optional[str]:
+        """
+        Determina el nombre del servicio basado en el puerto
+        
+        Args:
+            port: Número de puerto
+            
+        Returns:
+            Optional[str]: Nombre del servicio o None si no se reconoce
+        """
+        common_services = {
+            21: 'ftp', 
+            22: 'ssh', 
+            23: 'telnet',
+            25: 'smtp',
+            53: 'dns',
+            80: 'http',
+            110: 'pop3',
+            111: 'rpcbind',
+            135: 'msrpc',
+            139: 'netbios-ssn',
+            143: 'imap',
+            443: 'https',
+            445: 'microsoft-ds',
+            993: 'imaps',
+            995: 'pop3s',
+            1883: 'mqtt',
+            3306: 'mysql',
+            3389: 'ms-wbt-server',
+            5432: 'postgresql',
+            8080: 'http-proxy',
+            8443: 'https-alt'
+        }
+        
+        return common_services.get(port, None)
+
+    def fingerprint_device(self, ip: str, mac: str = None, basic_info: Dict = None, detailed_scan: bool = False) -> Dict:
         """
         Realiza un fingerprinting completo de un dispositivo
         
@@ -81,6 +165,7 @@ class DeviceFingerprinter:
             ip: Dirección IP del dispositivo
             mac: Dirección MAC del dispositivo (opcional)
             basic_info: Información básica ya conocida del dispositivo (opcional)
+            detailed_scan: Si es True, realiza un escaneo más detallado y agresivo (para escaneos individuales)
             
         Returns:
             Dict: Información completa del dispositivo
@@ -111,7 +196,8 @@ class DeviceFingerprinter:
         
         # Buscar en la base de datos si ya conocemos este dispositivo
         known_device = self.device_db.get_known_device(ip=ip)
-        if known_device:
+        # Para escaneos detallados, siempre realizar un nuevo escaneo completo
+        if known_device and not detailed_scan:
             # Si encontramos el dispositivo en la base de datos y es reciente,
             # usar esos datos y evitar un nuevo escaneo
             last_seen_diff = time.time() - known_device.get('last_seen', 0)
@@ -124,25 +210,34 @@ class DeviceFingerprinter:
                     if field in known_device and known_device[field]:
                         device_data[field] = known_device[field]
         
+        # Ajustar tiempos de espera para escaneos detallados
+        effective_timeout = self.timeout * 3 if detailed_scan else self.timeout
+        
         # Realizar fingerprinting utilizando múltiples técnicas en paralelo
         with concurrent.futures.ThreadPoolExecutor(max_workers=self.max_workers) as executor:
             # Iniciar tareas en paralelo
             hostname_future = executor.submit(self._get_hostname, ip)
             vendor_future = executor.submit(self._get_vendor_info, mac)
-            ports_scan_future = executor.submit(self._scan_ports, ip)
-            os_scan_future = executor.submit(self._get_os_info, ip)
+            
+            # Para escaneos detallados, usar un método diferente con más puertos
+            if detailed_scan:
+                ports_scan_future = executor.submit(self._scan_ports_extensive, ip)
+            else:
+                ports_scan_future = executor.submit(self._scan_ports, ip)
+            
+            os_scan_future = executor.submit(self._get_os_info, ip, detailed_scan)
             http_scan_future = executor.submit(self._get_http_info, ip)
             
             # Recopilar resultados a medida que estén disponibles
             try:
-                hostname = hostname_future.result(timeout=self.timeout)
+                hostname = hostname_future.result(timeout=effective_timeout)
                 if hostname:
                     device_data['hostname'] = hostname
             except (concurrent.futures.TimeoutError, Exception) as e:
                 logger.debug(f"Error obteniendo hostname para {ip}: {e}")
             
             try:
-                vendor_short, vendor_details = vendor_future.result(timeout=self.timeout)
+                vendor_short, vendor_details = vendor_future.result(timeout=effective_timeout)
                 if vendor_short != "Desconocido":
                     device_data['vendor'] = vendor_short
                     device_data['vendor_details'] = vendor_details
@@ -150,25 +245,49 @@ class DeviceFingerprinter:
                 logger.debug(f"Error obteniendo información de fabricante para {mac}: {e}")
             
             try:
-                open_ports = ports_scan_future.result(timeout=self.timeout * 2)
-                if open_ports:
-                    device_data['open_ports'] = open_ports
+                if detailed_scan:
+                    open_ports, service_details = ports_scan_future.result(timeout=effective_timeout * 2)
+                    if open_ports:
+                        device_data['open_ports'] = open_ports
+                    if service_details:
+                        device_data['service_details'] = service_details
+                else:
+                    open_ports = ports_scan_future.result(timeout=effective_timeout * 2)
+                    if open_ports:
+                        device_data['open_ports'] = open_ports
             except (concurrent.futures.TimeoutError, Exception) as e:
                 logger.debug(f"Error escaneando puertos para {ip}: {e}")
             
             try:
-                os_info = os_scan_future.result(timeout=self.timeout * 2)
+                os_info = os_scan_future.result(timeout=effective_timeout * 2)
                 if os_info and os_info != "Desconocido":
                     device_data['os'] = os_info
             except (concurrent.futures.TimeoutError, Exception) as e:
                 logger.debug(f"Error obteniendo información de OS para {ip}: {e}")
             
             try:
-                http_info = http_scan_future.result(timeout=self.timeout)
+                http_info = http_scan_future.result(timeout=effective_timeout)
                 if http_info:
                     device_data['http_signature'] = http_info
             except (concurrent.futures.TimeoutError, Exception) as e:
                 logger.debug(f"Error obteniendo información HTTP para {ip}: {e}")
+        
+        # Solo para escaneos detallados, añadir escaneos adicionales de servicios
+        if detailed_scan and 'open_ports' in device_data and device_data['open_ports'] and not 'service_details' in device_data:
+            # Si no obtuvimos detalles de servicio del escaneo de puertos, intentar obtenerlos ahora
+            service_details = {}
+            for port in device_data['open_ports']:
+                service_name = self._get_service_name(port)
+                if service_name:
+                    service_info = self._scan_service_specific(ip, port, service_name)
+                    if service_info:
+                        service_details[port] = {
+                            'name': service_name,
+                            'info': service_info
+                        }
+            
+            if service_details:
+                device_data['service_details'] = service_details
         
         # Buscar información adicional basada en el fabricante y MAC
         if mac:
@@ -186,8 +305,17 @@ class DeviceFingerprinter:
         # Usar el matcher de firmas para identificar el dispositivo
         device_data = self.signature_matcher.identify_device(device_data)
         
+        # Para escaneos detallados, intentar escanear puertos adicionales basados en el tipo de dispositivo
+        if detailed_scan and 'open_ports' in device_data and device_data['open_ports']:
+            additional_ports = self.scan_additional_ports(ip, device_data['open_ports'])
+            device_data['open_ports'] = additional_ports
+        
         # Guardar la información del dispositivo en la base de datos
         self.device_db.save_device_identification(device_data)
+        
+        # Añadir timestamp para indicar cuándo se realizó este escaneo detallado
+        if detailed_scan:
+            device_data['detailed_scan_time'] = time.time()
         
         return device_data
     
@@ -341,14 +469,33 @@ class DeviceFingerprinter:
         
         return []
     
-    def _get_os_info(self, ip: str) -> str:
-        """Obtiene información del sistema operativo"""
+    def _get_os_info(self, ip: str, detailed: bool = False) -> str:
+        """
+        Obtiene información del sistema operativo
+        
+        Args:
+            ip: Dirección IP del dispositivo
+            detailed: Si es True, realiza un escaneo más detallado
+        
+        Returns:
+            str: Nombre del sistema operativo o "Desconocido"
+        """
         try:
             # Usar nmap para detección de OS
             # Nota: esto requiere privilegios de administrador/root
+            arguments = "-O"
+            
+            if detailed:
+                # Configuración más exhaustiva para escaneos detallados
+                arguments += " --osscan-guess --max-os-tries=3"
+            else:
+                arguments += " --osscan-limit --max-os-tries=1"
+                
+            arguments += f" --host-timeout={self.timeout * (3 if detailed else 1.5) * 1000}ms"
+            
             result = self.nm.scan(
                 hosts=ip, 
-                arguments=f"-O --osscan-limit --max-os-tries=1 --host-timeout={self.timeout * 1500}"
+                arguments=arguments
             )
             
             # Extraer información de OS si está disponible
@@ -359,6 +506,10 @@ class DeviceFingerprinter:
                 # Obtener el mejor match
                 os_match = result['scan'][ip]['osmatch'][0]
                 os_name = os_match['name']
+                accuracy = os_match.get('accuracy', '')
+                
+                if detailed and accuracy:
+                    os_name = f"{os_name} (Precisión: {accuracy}%)"
                 
                 # Limpiar la cadena de OS para hacerla más legible
                 # Eliminar información de versión muy específica
@@ -371,7 +522,7 @@ class DeviceFingerprinter:
             logger.debug(f"Error al obtener información de OS para {ip}: {e}")
         
         return "Desconocido"
-    
+
     def _get_http_info(self, ip: str) -> Optional[str]:
         """Obtiene información de servicios HTTP/HTTPS para fingerprinting"""
         http_info = []

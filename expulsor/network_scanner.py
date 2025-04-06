@@ -39,9 +39,11 @@ class DeviceInfo:
         self.model = ""           # Modelo específico del dispositivo
         self.os = ""
         self.open_ports = []
+        self.service_details = {}  # Detalles de servicios detectados
         self.last_seen = time.time()
         self.status = "activo"
         self.blocked = False
+        self.detailed_scan_time = None  # Timestamp del último escaneo detallado
     
     def to_dict(self) -> Dict:
         """Convierte la información del dispositivo a un diccionario"""
@@ -55,9 +57,11 @@ class DeviceInfo:
             'model': self.model,
             'os': self.os,
             'open_ports': self.open_ports,
+            'service_details': self.service_details,
             'last_seen': self.last_seen,
             'status': self.status,
-            'blocked': self.blocked
+            'blocked': self.blocked,
+            'detailed_scan_time': self.detailed_scan_time
         }
     
     @classmethod
@@ -71,22 +75,23 @@ class DeviceInfo:
         device.model = data.get('model', '')
         device.os = data.get('os', '')
         device.open_ports = data.get('open_ports', [])
+        device.service_details = data.get('service_details', {})
         device.last_seen = data.get('last_seen', time.time())
         device.status = data.get('status', 'activo')
         device.blocked = data.get('blocked', False)
+        device.detailed_scan_time = data.get('detailed_scan_time', None)
         return device
 
     def update_from_dict(self, data: Dict) -> None:
         """Actualiza los campos del dispositivo desde un diccionario"""
         # Solo actualizar campos que están presentes en el diccionario
         for key, value in data.items():
-            if hasattr(self, key) and value:  # Solo actualizar si el valor no es vacío
+            if hasattr(self, key) and value is not None:  # Solo actualizar si el valor no es None
                 setattr(self, key, value)
         
         # Siempre actualizar last_seen
         self.last_seen = time.time()
         self.status = "activo"
-
 
 class NetworkScanner:
     """Escáner de red optimizado para detectar dispositivos y recopilar información"""
@@ -565,6 +570,8 @@ class NetworkScanner:
         # Función para realizar el escaneo en un hilo separado
         def scan_thread():
             try:
+                logger.info(f"Iniciando escaneo detallado para {ip}")
+                
                 # Obtener MAC si no la tenemos
                 mac = None
                 if ip in self.devices and self.devices[ip].mac:
@@ -572,8 +579,13 @@ class NetworkScanner:
                 else:
                     mac = self._get_mac_address(ip)
                 
-                # Realizar fingerprinting detallado
-                device_data = self.fingerprinter.fingerprint_device(ip, mac)
+                # Obtener información básica si ya tenemos el dispositivo
+                basic_info = None
+                if ip in self.devices:
+                    basic_info = self.devices[ip].to_dict()
+                
+                # Realizar fingerprinting detallado con el parámetro detailed_scan=True
+                device_data = self.fingerprinter.fingerprint_device(ip, mac, basic_info, detailed_scan=True)
                 
                 # Crear o actualizar objeto DeviceInfo
                 if ip in self.devices:
@@ -583,6 +595,15 @@ class NetworkScanner:
                     device = DeviceInfo(ip, device_data.get('mac', ''))
                     device.update_from_dict(device_data)
                     self.devices[ip] = device
+                
+                # Actualizar campos especiales como service_details y detailed_scan_time
+                if 'service_details' in device_data:
+                    device.service_details = device_data['service_details']
+                
+                if 'detailed_scan_time' in device_data:
+                    device.detailed_scan_time = device_data['detailed_scan_time']
+                
+                logger.info(f"Escaneo detallado completado para {ip}")
                 
                 # Llamar al callback si está definido
                 if callback:
@@ -606,7 +627,7 @@ class NetworkScanner:
         self.scanning = True
         thread = threading.Thread(target=scan_thread, daemon=True)
         thread.start()
-    
+
     def set_max_workers(self, max_workers: int):
         """Configura el número máximo de trabajadores para escaneos paralelos"""
         self.max_workers = max_workers
