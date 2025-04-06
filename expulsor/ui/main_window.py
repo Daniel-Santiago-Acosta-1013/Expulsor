@@ -19,8 +19,15 @@ from .device_model import DeviceTableModel
 
 
 class SpooferSignals(QObject):
-    """Clase de señales para comunicación segura entre hilos"""
+    """Clase de señales para comunicación segura entre hilos para el ARP Spoofer"""
     status_update = pyqtSignal(str, str, bool)
+
+
+class ScannerSignals(QObject):
+    """Clase de señales para comunicación segura entre hilos para el Network Scanner"""
+    device_found = pyqtSignal(object)
+    device_updated = pyqtSignal(object)
+    scan_complete = pyqtSignal(bool, str)
 
 
 class AgressiveModeDialog(QDialog):
@@ -94,6 +101,12 @@ class MainWindow(QMainWindow):
         # Inicializar señales para comunicación segura entre hilos
         self.spoofer_signals = SpooferSignals()
         self.spoofer_signals.status_update.connect(self._on_spoofer_status_safe)
+        
+        # Inicializar señales para el escáner de red
+        self.scanner_signals = ScannerSignals()
+        self.scanner_signals.device_found.connect(self._on_device_found_safe)
+        self.scanner_signals.device_updated.connect(self._on_device_updated_safe)
+        self.scanner_signals.scan_complete.connect(self._on_scan_complete_safe)
         
         # Configurar la ventana
         self.setWindowTitle("Expulsor - Control de Red")
@@ -274,8 +287,8 @@ class MainWindow(QMainWindow):
         """Actualiza el estado de los dispositivos periódicamente"""
         if not self.scanner.scanning and self.device_model.rowCount() > 0:
             self.scanner.scan_network(
-                on_device_found=self._on_device_updated,
-                on_scan_complete=self._on_scan_complete,
+                self._emit_device_updated,
+                self._emit_scan_complete,
                 quick_scan=True
             )
     
@@ -406,13 +419,28 @@ class MainWindow(QMainWindow):
         
         # Iniciar escaneo
         self.scanner.scan_network(
-            on_device_found=self._on_device_found,
-            on_scan_complete=self._on_scan_complete,
+            self._emit_device_found,
+            self._emit_scan_complete,
             quick_scan=False
         )
     
-    def _on_device_found(self, device: DeviceInfo):
-        """Callback cuando se encuentra un dispositivo durante el escaneo"""
+    # Métodos emisores de señales (desde hilos secundarios)
+    def _emit_device_found(self, device: DeviceInfo):
+        """Emite la señal device_found desde un hilo secundario"""
+        self.scanner_signals.device_found.emit(device)
+    
+    def _emit_device_updated(self, device: DeviceInfo):
+        """Emite la señal device_updated desde un hilo secundario"""
+        self.scanner_signals.device_updated.emit(device)
+    
+    def _emit_scan_complete(self, success: bool, message: str):
+        """Emite la señal scan_complete desde un hilo secundario"""
+        self.scanner_signals.scan_complete.emit(success, message)
+    
+    # Slots para recibir señales (en el hilo principal)
+    @pyqtSlot(object)
+    def _on_device_found_safe(self, device: DeviceInfo):
+        """Slot seguro para manejar la señal device_found"""
         # Marcar si es local o gateway
         if device.ip == self.scanner.local_ip:
             device.hostname = "Este dispositivo"
@@ -434,8 +462,9 @@ class MainWindow(QMainWindow):
             
         self.log(f"Dispositivo encontrado: {device.ip}{hostname_txt}")
     
-    def _on_device_updated(self, device: DeviceInfo):
-        """Callback cuando se actualiza un dispositivo durante un escaneo rápido"""
+    @pyqtSlot(object)
+    def _on_device_updated_safe(self, device: DeviceInfo):
+        """Slot seguro para manejar la señal device_updated"""
         # Preservar el estado de bloqueo
         existing_device = self.device_model.get_device_by_ip(device.ip)
         if existing_device:
@@ -453,8 +482,9 @@ class MainWindow(QMainWindow):
             self.selected_device = device
             self._update_device_details(device)
     
-    def _on_scan_complete(self, success: bool, message: str):
-        """Callback cuando se completa el escaneo"""
+    @pyqtSlot(bool, str)
+    def _on_scan_complete_safe(self, success: bool, message: str):
+        """Slot seguro para manejar la señal scan_complete"""
         self.scan_button.setEnabled(True)
         self.scan_button.setText("Escanear Red")
         
