@@ -6,21 +6,29 @@ import time
 import platform
 
 from PyQt6.QtCore import Qt, QTimer, pyqtSlot, pyqtSignal, QObject
-from PyQt6.QtGui import QAction
+from PyQt6.QtGui import QAction, QCursor
 from PyQt6.QtWidgets import (QHBoxLayout, QLabel, QMainWindow, 
                             QMessageBox, QPushButton, QSplitter, QTabWidget, 
                             QTableView, QTextEdit, QVBoxLayout, QWidget,
-                            QCheckBox, QDoubleSpinBox,
-                            QDialog, QGridLayout)
+                            QCheckBox, QDoubleSpinBox, QMenu,
+                            QDialog, QGridLayout, QToolButton)
 
 from ..network_scanner import DeviceInfo, NetworkScanner
 from ..arp_spoofer import ARPSpoofer
 from .device_model import DeviceTableModel
+from PyQt6.QtCore import QMetaObject
 
 
 class SpooferSignals(QObject):
-    """Clase de señales para comunicación segura entre hilos"""
+    """Clase de señales para comunicación segura entre hilos para el ARP Spoofer"""
     status_update = pyqtSignal(str, str, bool)
+
+
+class ScannerSignals(QObject):
+    """Clase de señales para comunicación segura entre hilos para el Network Scanner"""
+    device_found = pyqtSignal(object)
+    device_updated = pyqtSignal(object)
+    scan_complete = pyqtSignal(bool, str)
 
 
 class AgressiveModeDialog(QDialog):
@@ -95,6 +103,12 @@ class MainWindow(QMainWindow):
         self.spoofer_signals = SpooferSignals()
         self.spoofer_signals.status_update.connect(self._on_spoofer_status_safe)
         
+        # Inicializar señales para el escáner de red
+        self.scanner_signals = ScannerSignals()
+        self.scanner_signals.device_found.connect(self._on_device_found_safe)
+        self.scanner_signals.device_updated.connect(self._on_device_updated_safe)
+        self.scanner_signals.scan_complete.connect(self._on_scan_complete_safe)
+        
         # Configurar la ventana
         self.setWindowTitle("Expulsor - Control de Red")
         self.setMinimumSize(1000, 600)
@@ -139,9 +153,17 @@ class MainWindow(QMainWindow):
         # Menú Herramientas
         tools_menu = menu_bar.addMenu("Herramientas")
         
-        scan_action = QAction("Escanear Red", self)
-        scan_action.triggered.connect(self._on_scan_clicked)
-        tools_menu.addAction(scan_action)
+        # Submenú de escaneo
+        scan_menu = tools_menu.addMenu("Escanear Red")
+        
+        # Opciones de escaneo
+        scan_quick_action = QAction("Escaneo Rápido", self)
+        scan_quick_action.triggered.connect(self._on_quick_scan_clicked)
+        scan_menu.addAction(scan_quick_action)
+        
+        scan_deep_action = QAction("Escaneo Profundo", self)
+        scan_deep_action.triggered.connect(self._on_deep_scan_clicked)
+        scan_menu.addAction(scan_deep_action)
         
         # Configuración de bloqueo
         block_config_action = QAction("Configurar Bloqueo", self)
@@ -175,8 +197,31 @@ class MainWindow(QMainWindow):
         # Botones de control
         control_layout = QHBoxLayout()
         
-        self.scan_button = QPushButton("Escanear Red")
-        self.scan_button.clicked.connect(self._on_scan_clicked)
+        # Botón de escaneo con menú desplegable
+        self.scan_button = QToolButton()
+        self.scan_button.setText("Escanear")
+        self.scan_button.setPopupMode(QToolButton.ToolButtonPopupMode.MenuButtonPopup)
+        
+        # Crear menú de opciones de escaneo
+        scan_menu = QMenu()
+        
+        # Acción para escaneo rápido
+        scan_quick_action = QAction("Escaneo Rápido", self)
+        scan_quick_action.setToolTip("Realiza un escaneo básico para detectar dispositivos rápidamente")
+        scan_quick_action.triggered.connect(self._on_quick_scan_clicked)
+        scan_menu.addAction(scan_quick_action)
+        
+        # Acción para escaneo profundo
+        scan_deep_action = QAction("Escaneo Profundo", self)
+        scan_deep_action.setToolTip("Realiza un escaneo detallado de todos los dispositivos")
+        scan_deep_action.triggered.connect(self._on_deep_scan_clicked)
+        scan_menu.addAction(scan_deep_action)
+        
+        # Configurar el menú en el botón
+        self.scan_button.setMenu(scan_menu)
+        self.scan_button.setDefaultAction(scan_quick_action)
+        self.scan_button.clicked.connect(self._on_quick_scan_clicked)  # Acción por defecto
+        
         control_layout.addWidget(self.scan_button)
         
         self.block_button = QPushButton("Bloquear Acceso")
@@ -198,6 +243,9 @@ class MainWindow(QMainWindow):
         self.device_table.setSelectionMode(QTableView.SelectionMode.SingleSelection)
         self.device_table.clicked.connect(self._on_device_selected)
         self.device_table.doubleClicked.connect(self._on_device_details)
+        # Añadir menú contextual para escaneo individual
+        self.device_table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.device_table.customContextMenuRequested.connect(self._show_device_context_menu)
         
         # Ajustar ancho de columnas
         header = self.device_table.horizontalHeader()
@@ -257,6 +305,48 @@ class MainWindow(QMainWindow):
         self.log(f"IP local: {self.scanner.local_ip} | MAC: {self.scanner.local_mac}")
         self.log(f"Gateway: {self.scanner.gateway_ip} | MAC: {self.scanner.gateway_mac}")
     
+    def _show_device_context_menu(self, pos):
+        """Muestra el menú contextual para un dispositivo"""
+        # Obtener el índice bajo el cursor
+        index = self.device_table.indexAt(pos)
+        if not index.isValid():
+            return
+            
+        # Obtener el dispositivo
+        device = self.device_model.get_device_at_row(index.row())
+        if not device:
+            return
+            
+        # Crear menú contextual
+        context_menu = QMenu(self)
+        
+        # Opción para escanear el dispositivo individualmente
+        scan_action = QAction("Escanear este dispositivo (detallado)", self)
+        scan_action.triggered.connect(lambda: self._scan_specific_device(device.ip))
+        
+        # Determinar el estado del escaneo detallado
+        if hasattr(device, 'detailed_scan_time') and device.detailed_scan_time:
+            last_scan_time = time.strftime('%H:%M:%S', time.localtime(device.detailed_scan_time))
+            scan_action.setText(f"Escanear este dispositivo (último: {last_scan_time})")
+        
+        context_menu.addAction(scan_action)
+        
+        # Añadir opciones para bloquear/desbloquear
+        if device.blocked:
+            unblock_action = QAction("Restaurar acceso", self)
+            unblock_action.triggered.connect(lambda: self._unblock_device(device))
+            context_menu.addAction(unblock_action)
+        else:
+            block_action = QAction("Bloquear acceso", self)
+            block_action.triggered.connect(lambda: self._block_device(device))
+            # Deshabilitar para gateway y local
+            if device.ip == self.scanner.gateway_ip or device.ip == self.scanner.local_ip:
+                block_action.setEnabled(False)
+            context_menu.addAction(block_action)
+        
+        # Mostrar el menú contextual
+        context_menu.exec(QCursor.pos())
+
     def log(self, message: str, error: bool = False):
         """Añade un mensaje al log"""
         timestamp = time.strftime("%H:%M:%S")
@@ -274,8 +364,8 @@ class MainWindow(QMainWindow):
         """Actualiza el estado de los dispositivos periódicamente"""
         if not self.scanner.scanning and self.device_model.rowCount() > 0:
             self.scanner.scan_network(
-                on_device_found=self._on_device_updated,
-                on_scan_complete=self._on_scan_complete,
+                self._emit_device_updated,
+                self._emit_scan_complete,
                 quick_scan=True
             )
     
@@ -323,7 +413,7 @@ class MainWindow(QMainWindow):
         html += f"<p><b>Frecuencia de paquetes:</b> {self.spoofer.packet_rate} segundos</p>"
         
         self.block_text.setHtml(html)
-    
+
     def _update_device_details(self, device: DeviceInfo):
         """Actualiza la visualización de detalles de un dispositivo"""
         if not device:
@@ -333,31 +423,114 @@ class MainWindow(QMainWindow):
         # Formato HTML para mejor presentación
         details = f"""
         <h2>Detalles del Dispositivo</h2>
-        <p><b>IP:</b> {device.ip}</p>
-        <p><b>MAC:</b> {device.mac}</p>
-        <p><b>Hostname:</b> {device.hostname or "Desconocido"}</p>
+        <table width="100%" cellpadding="3">
+            <tr><td width="30%"><b>IP:</b></td><td>{device.ip}</td></tr>
+            <tr><td><b>MAC:</b></td><td>{device.mac}</td></tr>
+            <tr><td><b>Hostname:</b></td><td>{device.hostname or "Desconocido"}</td></tr>
+        </table>
         
         <h3>Información de Fabricante</h3>
-        <p><b>Fabricante:</b> {device.vendor or "Desconocido"}</p>
-        <p><b>Detalles de fabricante:</b> {device.vendor_details or "Desconocido"}</p>
+        <table width="100%" cellpadding="3">
+            <tr><td width="30%"><b>Fabricante:</b></td><td>{device.vendor or "Desconocido"}</td></tr>
+            <tr><td><b>Detalles de fabricante:</b></td><td>{device.vendor_details or "Desconocido"}</td></tr>
+        </table>
         
         <h3>Identificación del Dispositivo</h3>
-        <p><b>Tipo de dispositivo:</b> {device.device_type or "Desconocido"}</p>
-        <p><b>Modelo específico:</b> {device.model or "Desconocido"}</p>
-        <p><b>Sistema Operativo:</b> {device.os or "Desconocido"}</p>
+        <table width="100%" cellpadding="3">
+            <tr><td width="30%"><b>Tipo de dispositivo:</b></td><td>{device.device_type or "Desconocido"}</td></tr>
+            <tr><td><b>Modelo específico:</b></td><td>{device.model or "Desconocido"}</td></tr>
+            <tr><td><b>Sistema Operativo:</b></td><td>{device.os or "Desconocido"}</td></tr>
+        </table>
         
         <h3>Estado</h3>
-        <p><b>Estado:</b> {device.status}</p>
-        <p><b>Bloqueado:</b> {"Sí" if device.blocked else "No"}</p>
-        <p><b>Última actividad:</b> {time.strftime('%H:%M:%S', time.localtime(device.last_seen))}</p>
+        <table width="100%" cellpadding="3">
+            <tr><td width="30%"><b>Estado actual:</b></td><td>{device.status}</td></tr>
+            <tr><td><b>Bloqueado:</b></td><td>{"Sí" if device.blocked else "No"}</td></tr>
+            <tr><td><b>Última actividad:</b></td><td>{time.strftime('%d/%m/%Y %H:%M:%S', time.localtime(device.last_seen))}</td></tr>
         """
+        
+        # Si se ha realizado un escaneo detallado, mostrar cuándo
+        if hasattr(device, 'detailed_scan_time') and device.detailed_scan_time:
+            scan_time = time.strftime('%d/%m/%Y %H:%M:%S', time.localtime(device.detailed_scan_time))
+            details += f"<tr><td><b>Último escaneo detallado:</b></td><td>{scan_time}</td></tr>"
+        
+        details += "</table>"
         
         # Información de puertos si está disponible
         if device.open_ports:
-            details += "<h3>Puertos Abiertos</h3><ul>"
-            for port in device.open_ports:
-                details += f"<li>{port}</li>"
-            details += "</ul>"
+            details += "<h3>Puertos Abiertos y Servicios</h3>"
+            
+            # Si tenemos información detallada de servicios, mostrarla en una tabla
+            if hasattr(device, 'service_details') and device.service_details:
+                details += """
+                <table width="100%" border="1" cellpadding="3" cellspacing="0" style="border-collapse: collapse;">
+                    <tr style="background-color: #e0e0e0;">
+                        <th width="15%">Puerto</th>
+                        <th width="20%">Servicio</th>
+                        <th>Detalles</th>
+                    </tr>
+                """
+                
+                for port in sorted(device.open_ports):
+                    port_str = str(port)
+                    service_name = "Desconocido"
+                    service_details = ""
+                    
+                    if port in device.service_details:
+                        service_info = device.service_details[port]
+                        
+                        if isinstance(service_info, dict):
+                            if 'name' in service_info:
+                                service_name = service_info['name']
+                            elif 'info' in service_info and 'name' in service_info:
+                                service_name = service_info['name']
+                            
+                            # Compilar detalles del servicio
+                            details_parts = []
+                            
+                            # Si tenemos product, version, extrainfo
+                            if 'product' in service_info and service_info['product']:
+                                details_parts.append(service_info['product'])
+                                
+                            if 'version' in service_info and service_info['version']:
+                                details_parts.append(f"v{service_info['version']}")
+                                
+                            if 'extrainfo' in service_info and service_info['extrainfo']:
+                                details_parts.append(service_info['extrainfo'])
+                                
+                            # Si tenemos info general
+                            if 'info' in service_info and service_info['info']:
+                                details_parts.append(service_info['info'])
+                                
+                            service_details = " ".join(details_parts)
+                    
+                    # Alternar colores de fila
+                    row_color = "#f8f8f8" if port % 2 == 0 else "#ffffff"
+                    details += f"""
+                    <tr style="background-color: {row_color};">
+                        <td align="center">{port_str}</td>
+                        <td>{service_name}</td>
+                        <td>{service_details}</td>
+                    </tr>
+                    """
+                
+                details += "</table>"
+                
+                details += """
+                <p><small><i>Consejo: Realiza un escaneo específico de este dispositivo para obtener información detallada 
+                de servicios. Haz clic derecho sobre el dispositivo en la tabla y selecciona "Escanear este dispositivo".</i></small></p>
+                """
+            else:
+                # Si no tenemos información detallada, mostrar lista simple
+                details += "<ul>"
+                for port in sorted(device.open_ports):
+                    details += f"<li>Puerto {port}</li>"
+                details += "</ul>"
+                
+                details += """
+                <p><i>Para obtener información detallada de servicios, realiza un escaneo específico de este dispositivo.
+                Haz clic derecho sobre el dispositivo en la tabla y selecciona "Escanear este dispositivo".</i></p>
+                """
         else:
             details += "<p><i>No hay información de puertos disponible</i></p>"
         
@@ -370,9 +543,13 @@ class MainWindow(QMainWindow):
                 minutes, seconds = divmod(int(duration), 60)
                 hours, minutes = divmod(minutes, 60)
                 
-                details += f"<h3>Información de Bloqueo</h3>"
-                details += f"<p><b>Tiempo de bloqueo:</b> {hours:02d}:{minutes:02d}:{seconds:02d}</p>"
-                details += f"<p><b>Estado:</b> {'Activo' if info.get('active', False) else 'Inactivo'}</p>"
+                details += f"""
+                <h3>Información de Bloqueo</h3>
+                <table width="100%" cellpadding="3">
+                    <tr><td width="30%"><b>Tiempo de bloqueo:</b></td><td>{hours:02d}:{minutes:02d}:{seconds:02d}</td></tr>
+                    <tr><td><b>Estado:</b></td><td>{'Activo' if info.get('active', False) else 'Inactivo'}</td></tr>
+                </table>
+                """
         
         self.details_text.setHtml(details)
 
@@ -398,21 +575,127 @@ class MainWindow(QMainWindow):
         # Cambiar a la pestaña de detalles
         self.tab_widget.setCurrentIndex(0)
     
-    def _on_scan_clicked(self):
-        """Manejador para el botón de escaneo"""
+    def _on_quick_scan_clicked(self):
+        """Manejador para el botón de escaneo rápido"""
         self.scan_button.setEnabled(False)
         self.scan_button.setText("Escaneando...")
-        self.log("Iniciando escaneo de red completo...")
+        self.log("Iniciando escaneo rápido de red...")
         
-        # Iniciar escaneo
+        # Iniciar escaneo rápido
         self.scanner.scan_network(
-            on_device_found=self._on_device_found,
-            on_scan_complete=self._on_scan_complete,
-            quick_scan=False
+            self._emit_device_found,
+            self._emit_scan_complete,
+            quick_scan=True
         )
     
-    def _on_device_found(self, device: DeviceInfo):
-        """Callback cuando se encuentra un dispositivo durante el escaneo"""
+    def _on_deep_scan_clicked(self):
+        """Manejador para el botón de escaneo profundo"""
+        self.scan_button.setEnabled(False)
+        self.scan_button.setText("Escaneando...")
+        self.log("Iniciando escaneo profundo de red...")
+        
+        # Iniciar escaneo profundo
+        self.scanner.scan_network(
+            self._emit_device_found,
+            self._emit_scan_complete,
+            quick_scan=False
+        )
+
+    def _scan_specific_device(self, ip):
+        """Escanea un dispositivo específico"""
+        if not ip or self.scanner.scanning:
+            # Mostrar mensaje de error si ya hay un escaneo en curso
+            if self.scanner.scanning:
+                self.log(f"Ya hay un escaneo en curso. Por favor, espere.", error=True)
+                QMessageBox.warning(
+                    self,
+                    "Escaneo en curso",
+                    "Ya hay un escaneo en curso. Por favor, espere a que finalice."
+                )
+            return
+        
+        self.log(f"Iniciando escaneo detallado del dispositivo {ip}...")
+        
+        # Cambiar a la pestaña de detalles
+        self.tab_widget.setCurrentIndex(0)
+        
+        # Deshabilitar el botón de escaneo
+        self.scan_button.setEnabled(False)
+        
+        # Crear un mensaje de espera y mostrarlo en la barra de estado
+        self.statusBar().showMessage(f"Escaneando dispositivo {ip} (puede tardar hasta un minuto)...")
+        
+        # Mostrar información preliminar de que el escaneo está en curso
+        if self.selected_device and self.selected_device.ip == ip:
+            current_html = self.details_text.toHtml()
+            self.details_text.setHtml(
+                current_html + 
+                "<div style='margin-top: 20px; padding: 10px; background-color: #f0f7ff; border-left: 4px solid #0078d7;'>" +
+                "<b>⏳ Escaneo detallado en curso...</b><br>" +
+                "Este proceso puede tardar hasta un minuto mientras se recopila información completa del dispositivo." +
+                "</div>"
+            )
+        
+        # Crear un temporizador para mostrar que el escaneo sigue en progreso
+        progress_timer = QTimer(self)
+        progress_dots = 0
+        
+        def update_progress():
+            nonlocal progress_dots
+            progress_dots = (progress_dots + 1) % 4
+            dots = "." * progress_dots
+            self.statusBar().showMessage(f"Escaneando dispositivo {ip} (puede tardar hasta un minuto){dots}")
+        
+        # Iniciar el temporizador
+        progress_timer.timeout.connect(update_progress)
+        progress_timer.start(500)  # Actualizar cada 500ms
+        
+        # Función de callback para cuando se complete el escaneo
+        # IMPORTANTE: Esta función se llamará desde un hilo secundario,
+        # por lo que debemos asegurar que solo emita señales seguras
+        def on_device_scanned(device):
+            # Emitir la señal para procesar de forma segura en el hilo principal
+            self.scanner_signals.device_updated.emit(device)
+            
+            # Es seguro detener el temporizador desde el hilo principal usando un QueuedConnection
+            QMetaObject.invokeMethod(progress_timer, "stop", Qt.ConnectionType.QueuedConnection)
+        
+        # Iniciar el escaneo específico
+        self.scanner.scan_specific_device(ip, on_device_scanned)
+        
+        # Configurar un temporizador de seguridad para evitar que la interfaz quede bloqueada
+        safety_timer = QTimer(self)
+        safety_timer.setSingleShot(True)
+        
+        def safety_timeout():
+            if self.scanner.scanning:
+                # Si después de 2 minutos sigue escaneando, forzar el término
+                self.scanner.scanning = False
+                progress_timer.stop()
+                self.scan_button.setEnabled(True)
+                self.statusBar().showMessage("El escaneo ha excedido el tiempo límite", 5000)
+                self.log(f"⚠️ El escaneo de {ip} ha excedido el tiempo límite. Posible problema de conexión.", error=True)
+        
+        safety_timer.timeout.connect(safety_timeout)
+        safety_timer.start(120000)  # 2 minutos de timeout
+
+    # Métodos emisores de señales (desde hilos secundarios)
+    def _emit_device_found(self, device: DeviceInfo):
+        """Emite la señal device_found desde un hilo secundario"""
+        self.scanner_signals.device_found.emit(device)
+    
+    def _emit_device_updated(self, device: DeviceInfo):
+        """Emite la señal device_updated desde un hilo secundario"""
+        self.scanner_signals.device_updated.emit(device)
+    
+    def _emit_scan_complete(self, success: bool, message: str):
+        """Emite la señal scan_complete desde un hilo secundario"""
+        self.scanner_signals.scan_complete.emit(success, message)
+    
+    # Slots para recibir señales (en el hilo principal)
+    @pyqtSlot(object)
+    def _on_device_found_safe(self, device: DeviceInfo):
+        """Slot seguro para manejar la señal device_found"""
         # Marcar si es local o gateway
         if device.ip == self.scanner.local_ip:
             device.hostname = "Este dispositivo"
@@ -434,8 +717,9 @@ class MainWindow(QMainWindow):
             
         self.log(f"Dispositivo encontrado: {device.ip}{hostname_txt}")
     
-    def _on_device_updated(self, device: DeviceInfo):
-        """Callback cuando se actualiza un dispositivo durante un escaneo rápido"""
+    @pyqtSlot(object)
+    def _on_device_updated_safe(self, device: DeviceInfo):
+        """Slot seguro para manejar la señal device_updated"""
         # Preservar el estado de bloqueo
         existing_device = self.device_model.get_device_by_ip(device.ip)
         if existing_device:
@@ -453,10 +737,11 @@ class MainWindow(QMainWindow):
             self.selected_device = device
             self._update_device_details(device)
     
-    def _on_scan_complete(self, success: bool, message: str):
-        """Callback cuando se completa el escaneo"""
+    @pyqtSlot(bool, str)
+    def _on_scan_complete_safe(self, success: bool, message: str):
+        """Slot seguro para manejar la señal scan_complete"""
         self.scan_button.setEnabled(True)
-        self.scan_button.setText("Escanear Red")
+        self.scan_button.setText("Escanear")
         
         if success:
             self.log(f"Escaneo completado: {len(self.scanner.get_all_devices())} dispositivos encontrados")
@@ -486,14 +771,14 @@ class MainWindow(QMainWindow):
                     f"Modo bloqueo = {settings['block_mode']}, " +
                     f"Frecuencia = {settings['packet_rate']} segundos")
 
-    def _on_block_clicked(self):
-        """Manejador para el botón de bloqueo"""
-        if not self.selected_device or not self.spoofer:
+    def _block_device(self, device):
+        """Bloquea un dispositivo específico"""
+        if not device or not self.spoofer:
             return
         
         # Confirmar con el usuario
         reply = QMessageBox.question(self, "Confirmar Bloqueo", 
-                                    f"¿Deseas bloquear el acceso a internet para {self.selected_device.ip}?",
+                                    f"¿Deseas bloquear el acceso a internet para {device.ip}?",
                                     QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
         
         if reply == QMessageBox.StandardButton.Yes:
@@ -501,39 +786,53 @@ class MainWindow(QMainWindow):
             self.tab_widget.setCurrentIndex(2)
             
             # Iniciar spoofing
-            success = self.spoofer.start_spoofing(self.selected_device.ip)
+            success = self.spoofer.start_spoofing(device.ip)
             
             if success:
-                self.log(f"Iniciando bloqueo para {self.selected_device.ip}")
-                self.selected_device.blocked = True
-                self.device_model.update_device(self.selected_device)
-                self._update_device_details(self.selected_device)
+                self.log(f"Iniciando bloqueo para {device.ip}")
+                device.blocked = True
+                self.device_model.update_device(device)
                 
-                # Actualizar botones
-                self.block_button.setEnabled(False)
-                self.unblock_button.setEnabled(True)
+                # Actualizar detalles si es el dispositivo seleccionado
+                if self.selected_device and device.ip == self.selected_device.ip:
+                    self.selected_device = device
+                    self._update_device_details(device)
+                    self.block_button.setEnabled(False)
+                    self.unblock_button.setEnabled(True)
             else:
-                self.log(f"No se pudo iniciar el bloqueo para {self.selected_device.ip}", error=True)
+                self.log(f"No se pudo iniciar el bloqueo para {device.ip}", error=True)
     
-    def _on_unblock_clicked(self):
-        """Manejador para el botón de desbloqueo"""
-        if not self.selected_device or not self.spoofer:
+    def _unblock_device(self, device):
+        """Desbloquea un dispositivo específico"""
+        if not device or not self.spoofer:
             return
         
         # Detener el spoofing
-        success = self.spoofer.stop_spoofing(self.selected_device.ip)
+        success = self.spoofer.stop_spoofing(device.ip)
         
         if success:
-            self.log(f"Restaurando acceso para {self.selected_device.ip}")
-            self.selected_device.blocked = False
-            self.device_model.update_device(self.selected_device)
-            self._update_device_details(self.selected_device)
+            self.log(f"Restaurando acceso para {device.ip}")
+            device.blocked = False
+            self.device_model.update_device(device)
             
-            # Actualizar botones
-            self.block_button.setEnabled(True)
-            self.unblock_button.setEnabled(False)
+            # Actualizar detalles si es el dispositivo seleccionado
+            if self.selected_device and device.ip == self.selected_device.ip:
+                self.selected_device = device
+                self._update_device_details(device)
+                self.block_button.setEnabled(True)
+                self.unblock_button.setEnabled(False)
         else:
-            self.log(f"No se pudo restaurar el acceso para {self.selected_device.ip}", error=True)
+            self.log(f"No se pudo restaurar el acceso para {device.ip}", error=True)
+    
+    def _on_block_clicked(self):
+        """Manejador para el botón de bloqueo"""
+        if self.selected_device:
+            self._block_device(self.selected_device)
+    
+    def _on_unblock_clicked(self):
+        """Manejador para el botón de desbloqueo"""
+        if self.selected_device:
+            self._unblock_device(self.selected_device)
     
     def _emit_spoofer_status(self, ip: str, message: str, success: bool):
         """Emite la señal desde el hilo secundario al hilo principal"""
