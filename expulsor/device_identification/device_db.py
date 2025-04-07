@@ -18,7 +18,7 @@ class DeviceDatabase:
     # Las URLs para descargar las diferentes bases de datos
     DB_URLS = {
         'oui': "https://standards-oui.ieee.org/oui/oui.csv",
-        'mac_vendors': "https://api.macvendors.com/oui.txt",
+        'mac_vendors': "https://www.wireshark.org/download/automated/data/manuf",
         'nmap_fingerprints': "https://svn.nmap.org/nmap/nmap-os-db",
     }
     
@@ -209,7 +209,7 @@ class DeviceDatabase:
             self._download_mac_vendors()
     
     def _download_mac_vendors(self):
-        """Descarga una base de datos alternativa de fabricantes MAC"""
+        """Descarga una base de datos de fabricantes MAC desde Wireshark"""
         try:
             vendors_path = self.cache_dir / "mac_vendors.json"
             url = self.DB_URLS['mac_vendors']
@@ -223,18 +223,20 @@ class DeviceDatabase:
                 response = urllib.request.urlopen(req, timeout=15)
                 
                 if response.getcode() == 200:
-                    content = response.read().decode('utf-8')
+                    content = response.read().decode('utf-8', errors='ignore')
                     vendors_dict = {}
                     
-                    # Procesar el formato de la API de macvendors.com
-                    pattern = r'([0-9A-F]{2}:[0-9A-F]{2}:[0-9A-F]{2})\s+\(hex\)\s+(.*?)$'
+                    # Procesar el formato de la base de datos de Wireshark
                     for line in content.splitlines():
-                        match = re.match(pattern, line, re.MULTILINE)
-                        if match:
-                            mac_prefix = match.group(1).lower()
-                            company = match.group(2).strip()
-                            if mac_prefix and company:
-                                vendors_dict[mac_prefix] = company
+                        if line and not line.startswith('#'):
+                            parts = line.split('#')[0].strip().split('\t')
+                            if len(parts) >= 2:
+                                mac_prefix = parts[0].replace(':', '').lower()
+                                # Convertir a formato XX:XX:XX si tiene la longitud adecuada
+                                if len(mac_prefix) >= 6:
+                                    formatted_prefix = ':'.join([mac_prefix[i:i+2] for i in range(0, 6, 2)]).lower()
+                                    company = parts[1].strip()
+                                    vendors_dict[formatted_prefix] = company
                     
                     # Guardar en un archivo JSON
                     with open(vendors_path, 'w') as f:
@@ -245,6 +247,8 @@ class DeviceDatabase:
                     print(f"Base de datos de fabricantes MAC descargada: {len(vendors_dict)} registros")
                 else:
                     print(f"Error al descargar la base de datos de fabricantes MAC: {response.getcode()}")
+                    # Intentar un método alternativo de descarga
+                    self._download_alternate_mac_db()
             except Exception as e:
                 print(f"Error en la descarga primaria: {e}")
                 # Intentar un método alternativo de descarga
@@ -257,27 +261,25 @@ class DeviceDatabase:
     def _download_alternate_mac_db(self):
         """Descarga una fuente alternativa de información de fabricantes MAC"""
         try:
-            # Usar una URL alternativa, como la base de datos de Wireshark
-            alt_url = "https://gitlab.com/wireshark/wireshark/-/raw/master/manuf"
+            # Usar la base de datos de IEEE OUI como respaldo
+            alt_url = self.DB_URLS['oui']
             
             print(f"Intentando descarga alternativa desde {alt_url}...")
-            response = urllib.request.urlopen(alt_url, timeout=10)
+            response = urllib.request.urlopen(alt_url, timeout=15)
             
             if response.getcode() == 200:
                 content = response.read().decode('utf-8')
                 vendors_dict = {}
                 
-                # Procesar el formato de la base de datos de Wireshark
-                for line in content.splitlines():
-                    if line and not line.startswith('#'):
-                        parts = line.split('#')[0].strip().split('\t')
-                        if len(parts) >= 2:
-                            mac_prefix = parts[0].replace(':', '').lower()
-                            # Convertir a formato XX:XX:XX
-                            if len(mac_prefix) >= 6:
-                                formatted_prefix = ':'.join([mac_prefix[i:i+2] for i in range(0, 6, 2)]).lower()
-                                company = parts[1].strip()
-                                vendors_dict[formatted_prefix] = company
+                # Procesar el CSV de IEEE OUI
+                lines = content.splitlines()
+                for line in lines[1:]:  # Saltamos la cabecera
+                    parts = line.split(',')
+                    if len(parts) >= 3:
+                        mac_prefix = parts[1].strip('"').replace('-', ':').lower()
+                        company = parts[2].strip('"')
+                        if mac_prefix and company:
+                            vendors_dict[mac_prefix] = company
                 
                 # Guardar en un archivo JSON
                 vendors_path = self.cache_dir / "mac_vendors.json"
@@ -287,8 +289,55 @@ class DeviceDatabase:
                 # Actualizar el diccionario en memoria
                 self.mac_vendors_db.update(vendors_dict)
                 print(f"Base de datos alternativa de fabricantes MAC descargada: {len(vendors_dict)} registros")
+                return
         except Exception as e:
             print(f"Error al descargar la base de datos alternativa de fabricantes MAC: {e}")
+        
+        # Si llegamos aquí, ambos métodos fallaron. Usar una base de datos mínima incorporada
+        try:
+            print("Usando base de datos de fabricantes incorporada como último recurso...")
+            min_vendors = {
+                "00:00:0c": "Cisco Systems",
+                "00:1a:11": "Google, Inc.",
+                "00:04:96": "Extreme Networks",
+                "b8:27:eb": "Raspberry Pi Foundation",
+                "00:0c:29": "VMware, Inc.",
+                "18:fe:34": "Apple, Inc.",
+                "d4:3d:7e": "Apple, Inc.",
+                "28:cf:da": "Apple, Inc.",
+                "00:50:56": "VMware, Inc.",
+                "00:1d:7e": "Cisco-Linksys, LLC",
+                "00:25:9c": "Cisco-Linksys, LLC",
+                "cc:16:7e": "Cisco Systems",
+                "e8:40:f2": "Pegatron Corporation",
+                "00:15:5d": "Microsoft Corporation",
+                "00:17:fa": "Microsoft Corporation",
+                "00:08:74": "Dell Inc.",
+                "a4:ba:db": "Dell Inc.",
+                "00:13:a9": "Sony Corporation",
+                "00:26:b0": "Apple, Inc.",
+                "78:dd:08": "Hon Hai Precision Ind. Co.,Ltd.",
+                "00:11:32": "Synology Incorporated",
+                "00:11:33": "QNAP Systems, Inc.",
+                "10:7b:ef": "Zyxel Communications Corp.",
+                "00:90:4c": "Epson",
+                "00:68:eb": "HP Inc.",
+                "00:18:fe": "Hewlett Packard",
+                "24:be:05": "Hewlett Packard",
+            }
+            
+            # Guardar esta pequeña base de datos
+            vendors_path = self.cache_dir / "mac_vendors.json"
+            with open(vendors_path, 'w') as f:
+                json.dump(min_vendors, f)
+            
+            # Actualizar el diccionario en memoria
+            self.mac_vendors_db.update(min_vendors)
+            print(f"Base de datos mínima incorporada cargada: {len(min_vendors)} registros")
+        except Exception as e:
+            print(f"Error al cargar la base de datos mínima incorporada: {e}")
+            # En este punto, simplemente tendremos un diccionario vacío
+            self.mac_vendors_db = {}
     
     def _load_or_download_fingerprints_db(self):
         """Carga o descarga la base de datos de fingerprints de Nmap"""
@@ -753,7 +802,11 @@ class DeviceDatabase:
         
         # Verificar si ya está en caché
         if mac in self.mac_vendors_db:
-            return self.mac_vendors_db[mac]
+            if isinstance(self.mac_vendors_db[mac], tuple):
+                return self.mac_vendors_db[mac]
+            else:
+                vendor_info = self.mac_vendors_db[mac]
+                return (vendor_info, vendor_info)
         
         # Extraer prefijo OUI (primeros 6 caracteres)
         prefix = mac[:8]  # Formato XX:XX:XX
