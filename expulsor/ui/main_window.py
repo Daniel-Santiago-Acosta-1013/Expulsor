@@ -16,6 +16,7 @@ from PyQt6.QtWidgets import (QHBoxLayout, QLabel, QMainWindow,
 from ..network_scanner import DeviceInfo, NetworkScanner
 from ..arp_spoofer import ARPSpoofer
 from .device_model import DeviceTableModel
+from PyQt6.QtCore import QMetaObject
 
 
 class SpooferSignals(QObject):
@@ -599,20 +600,30 @@ class MainWindow(QMainWindow):
             self._emit_scan_complete,
             quick_scan=False
         )
-    
+
     def _scan_specific_device(self, ip):
         """Escanea un dispositivo específico"""
         if not ip or self.scanner.scanning:
+            # Mostrar mensaje de error si ya hay un escaneo en curso
+            if self.scanner.scanning:
+                self.log(f"Ya hay un escaneo en curso. Por favor, espere.", error=True)
+                QMessageBox.warning(
+                    self,
+                    "Escaneo en curso",
+                    "Ya hay un escaneo en curso. Por favor, espere a que finalice."
+                )
             return
-            
+        
         self.log(f"Iniciando escaneo detallado del dispositivo {ip}...")
         
         # Cambiar a la pestaña de detalles
         self.tab_widget.setCurrentIndex(0)
         
-        # Deshabilitar botones de escaneo mientras se realiza
+        # Deshabilitar el botón de escaneo
         self.scan_button.setEnabled(False)
-        self.statusBar().showMessage(f"Escaneando dispositivo {ip} (puede tardar un momento)...")
+        
+        # Crear un mensaje de espera y mostrarlo en la barra de estado
+        self.statusBar().showMessage(f"Escaneando dispositivo {ip} (puede tardar hasta un minuto)...")
         
         # Mostrar información preliminar de que el escaneo está en curso
         if self.selected_device and self.selected_device.ip == ip:
@@ -625,23 +636,48 @@ class MainWindow(QMainWindow):
                 "</div>"
             )
         
+        # Crear un temporizador para mostrar que el escaneo sigue en progreso
+        progress_timer = QTimer(self)
+        progress_dots = 0
+        
+        def update_progress():
+            nonlocal progress_dots
+            progress_dots = (progress_dots + 1) % 4
+            dots = "." * progress_dots
+            self.statusBar().showMessage(f"Escaneando dispositivo {ip} (puede tardar hasta un minuto){dots}")
+        
+        # Iniciar el temporizador
+        progress_timer.timeout.connect(update_progress)
+        progress_timer.start(500)  # Actualizar cada 500ms
+        
         # Función de callback para cuando se complete el escaneo
+        # IMPORTANTE: Esta función se llamará desde un hilo secundario,
+        # por lo que debemos asegurar que solo emita señales seguras
         def on_device_scanned(device):
-            # Emitir la señal para procesar de forma segura
-            self._emit_device_updated(device)
+            # Emitir la señal para procesar de forma segura en el hilo principal
+            self.scanner_signals.device_updated.emit(device)
             
-            # Habilitar botones y actualizar estado
-            self.scan_button.setEnabled(True)
-            self.statusBar().showMessage(f"Escaneo detallado de {ip} completado", 5000)
-            self.log(f"✅ Escaneo detallado del dispositivo {ip} completado con éxito")
-            
-            # Si todavía es el dispositivo seleccionado, actualizar detalles
-            if self.selected_device and self.selected_device.ip == ip:
-                self.selected_device = device
-                self._update_device_details(device)
+            # Es seguro detener el temporizador desde el hilo principal usando un QueuedConnection
+            QMetaObject.invokeMethod(progress_timer, "stop", Qt.ConnectionType.QueuedConnection)
         
         # Iniciar el escaneo específico
         self.scanner.scan_specific_device(ip, on_device_scanned)
+        
+        # Configurar un temporizador de seguridad para evitar que la interfaz quede bloqueada
+        safety_timer = QTimer(self)
+        safety_timer.setSingleShot(True)
+        
+        def safety_timeout():
+            if self.scanner.scanning:
+                # Si después de 2 minutos sigue escaneando, forzar el término
+                self.scanner.scanning = False
+                progress_timer.stop()
+                self.scan_button.setEnabled(True)
+                self.statusBar().showMessage("El escaneo ha excedido el tiempo límite", 5000)
+                self.log(f"⚠️ El escaneo de {ip} ha excedido el tiempo límite. Posible problema de conexión.", error=True)
+        
+        safety_timer.timeout.connect(safety_timeout)
+        safety_timer.start(120000)  # 2 minutos de timeout
 
     # Métodos emisores de señales (desde hilos secundarios)
     def _emit_device_found(self, device: DeviceInfo):

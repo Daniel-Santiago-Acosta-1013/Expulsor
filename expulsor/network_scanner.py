@@ -579,6 +579,16 @@ class NetworkScanner:
                 else:
                     mac = self._get_mac_address(ip)
                 
+                # Asegurarse de que MAC sea una cadena de texto válida
+                if isinstance(mac, list):
+                    # Si por alguna razón MAC es una lista, tomar el primer elemento
+                    if mac and len(mac) > 0:
+                        mac = str(mac[0]).lower()
+                    else:
+                        mac = ""
+                elif mac is not None:
+                    mac = str(mac).lower()
+                
                 # Obtener información básica si ya tenemos el dispositivo
                 basic_info = None
                 if ip in self.devices:
