@@ -12,8 +12,13 @@ use crate::domain::settings::ScanKind;
 use crate::presentation::tui::theme::Theme;
 use crate::utils::shutdown::ShutdownSignal;
 use anyhow::Result;
+use crossterm::cursor::Show;
 use crossterm::event::{self, Event, KeyCode, KeyModifiers};
-use crossterm::terminal::{disable_raw_mode, enable_raw_mode};
+use crossterm::execute;
+use crossterm::terminal::{
+    disable_raw_mode, enable_raw_mode, Clear as TerminalClear, ClearType, EnterAlternateScreen,
+    LeaveAlternateScreen,
+};
 use ratatui::backend::CrosstermBackend;
 use ratatui::layout::{Alignment, Constraint, Direction, Layout, Rect};
 use ratatui::style::{Modifier, Style};
@@ -66,7 +71,8 @@ impl Tui {
         shutdown: ShutdownSignal,
     ) -> Result<Self> {
         enable_raw_mode()?;
-        let stdout = io::stdout();
+        let mut stdout = io::stdout();
+        execute!(stdout, EnterAlternateScreen, TerminalClear(ClearType::All))?;
         let backend = CrosstermBackend::new(stdout);
         let terminal = Terminal::new(backend)?;
 
@@ -251,6 +257,8 @@ impl Tui {
 impl Drop for Tui {
     fn drop(&mut self) {
         let _ = disable_raw_mode();
+        let mut stdout = io::stdout();
+        let _ = execute!(stdout, LeaveAlternateScreen, Show);
     }
 }
 
