@@ -1,0 +1,2524 @@
+{
+  "ports": [
+    {
+      "ports": [
+        80,
+        443
+      ],
+      "labels": [
+        "Router",
+        "Gateway",
+        "Access Point",
+        "Embedded Device"
+      ]
+    },
+    {
+      "ports": [
+        80,
+        443,
+        8080
+      ],
+      "labels": [
+        "Router",
+        "Gateway",
+        "Access Point"
+      ]
+    },
+    {
+      "ports": [
+        80,
+        443,
+        8443
+      ],
+      "labels": [
+        "Router",
+        "Smart Hub",
+        "NVR"
+      ]
+    },
+    {
+      "ports": [
+        80,
+        23
+      ],
+      "labels": [
+        "Router",
+        "Embedded Device",
+        "IoT Device"
+      ]
+    },
+    {
+      "ports": [
+        80,
+        23,
+        21
+      ],
+      "labels": [
+        "Router",
+        "NAS",
+        "Embedded Server"
+      ]
+    },
+    {
+      "ports": [
+        554,
+        80
+      ],
+      "labels": [
+        "IP Camera",
+        "Security Camera",
+        "NVR"
+      ]
+    },
+    {
+      "ports": [
+        554,
+        80,
+        443
+      ],
+      "labels": [
+        "IP Camera",
+        "Security Camera",
+        "NVR"
+      ]
+    },
+    {
+      "ports": [
+        554,
+        1935
+      ],
+      "labels": [
+        "IP Camera",
+        "Security Camera",
+        "Streaming Device"
+      ]
+    },
+    {
+      "ports": [
+        1883
+      ],
+      "labels": [
+        "IoT Device",
+        "Smart Home Hub",
+        "MQTT Broker"
+      ]
+    },
+    {
+      "ports": [
+        1883,
+        8883
+      ],
+      "labels": [
+        "IoT Device",
+        "Smart Home Hub",
+        "MQTT Broker"
+      ]
+    },
+    {
+      "ports": [
+        8009
+      ],
+      "labels": [
+        "Chromecast",
+        "Smart TV",
+        "Streaming Device"
+      ]
+    },
+    {
+      "ports": [
+        8008,
+        8009
+      ],
+      "labels": [
+        "Chromecast",
+        "Smart TV",
+        "Google Device"
+      ]
+    },
+    {
+      "ports": [
+        548,
+        5009
+      ],
+      "labels": [
+        "Apple Device",
+        "Mac",
+        "Time Capsule"
+      ]
+    },
+    {
+      "ports": [
+        548,
+        5009,
+        5353
+      ],
+      "labels": [
+        "Apple Device",
+        "Mac",
+        "Time Capsule"
+      ]
+    },
+    {
+      "ports": [
+        62078
+      ],
+      "labels": [
+        "iPhone",
+        "iPad",
+        "Apple Mobile Device"
+      ]
+    },
+    {
+      "ports": [
+        5353
+      ],
+      "labels": [
+        "mDNS Device",
+        "IoT Device",
+        "Networked Device"
+      ]
+    },
+    {
+      "ports": [
+        5353,
+        7000
+      ],
+      "labels": [
+        "Apple TV",
+        "AirPlay Device"
+      ]
+    },
+    {
+      "ports": [
+        5000,
+        5353
+      ],
+      "labels": [
+        "Sonos Speaker",
+        "Smart Speaker",
+        "Audio Device"
+      ]
+    },
+    {
+      "ports": [
+        8080,
+        8443,
+        9080
+      ],
+      "labels": [
+        "IP Camera",
+        "NVR",
+        "DVR",
+        "Surveillance System"
+      ]
+    },
+    {
+      "ports": [
+        9100
+      ],
+      "labels": [
+        "Printer",
+        "Network Printer"
+      ]
+    },
+    {
+      "ports": [
+        9100,
+        515
+      ],
+      "labels": [
+        "Printer",
+        "Network Printer"
+      ]
+    },
+    {
+      "ports": [
+        22,
+        80,
+        443
+      ],
+      "labels": [
+        "Linux Device",
+        "Server",
+        "NAS"
+      ]
+    },
+    {
+      "ports": [
+        22,
+        80,
+        443,
+        3306
+      ],
+      "labels": [
+        "Web Server",
+        "LAMP Server"
+      ]
+    },
+    {
+      "ports": [
+        3389
+      ],
+      "labels": [
+        "Windows Remote Desktop",
+        "Windows Server"
+      ]
+    },
+    {
+      "ports": [
+        3389,
+        445
+      ],
+      "labels": [
+        "Windows Server",
+        "Windows Device"
+      ]
+    },
+    {
+      "ports": [
+        445
+      ],
+      "labels": [
+        "Windows Device",
+        "Windows File Sharing"
+      ]
+    },
+    {
+      "ports": [
+        139,
+        445
+      ],
+      "labels": [
+        "Windows Device",
+        "Windows File Sharing"
+      ]
+    },
+    {
+      "ports": [
+        53
+      ],
+      "labels": [
+        "DNS Server",
+        "Domain Controller"
+      ]
+    },
+    {
+      "ports": [
+        53,
+        88,
+        389
+      ],
+      "labels": [
+        "Domain Controller",
+        "Active Directory Server"
+      ]
+    },
+    {
+      "ports": [
+        5060,
+        5061
+      ],
+      "labels": [
+        "VoIP Device",
+        "SIP Phone",
+        "IP Phone"
+      ]
+    },
+    {
+      "ports": [
+        1900
+      ],
+      "labels": [
+        "UPNP Device",
+        "Smart Device",
+        "IoT Device"
+      ]
+    },
+    {
+      "ports": [
+        1900,
+        5000
+      ],
+      "labels": [
+        "Smart TV",
+        "Media Device",
+        "DLNA Device"
+      ]
+    },
+    {
+      "ports": [
+        2323
+      ],
+      "labels": [
+        "Telnet Device",
+        "IoT Device",
+        "Embedded Device"
+      ]
+    },
+    {
+      "ports": [
+        502
+      ],
+      "labels": [
+        "Modbus Device",
+        "Industrial Control",
+        "PLC"
+      ]
+    },
+    {
+      "ports": [
+        20,
+        21
+      ],
+      "labels": [
+        "FTP Server",
+        "NAS",
+        "Storage Device"
+      ]
+    },
+    {
+      "ports": [
+        67,
+        68
+      ],
+      "labels": [
+        "DHCP Server",
+        "Router",
+        "Network Infrastructure"
+      ]
+    },
+    {
+      "ports": [
+        123
+      ],
+      "labels": [
+        "NTP Server",
+        "Network Infrastructure",
+        "Time Server"
+      ]
+    },
+    {
+      "ports": [
+        161,
+        162
+      ],
+      "labels": [
+        "SNMP Device",
+        "Network Infrastructure",
+        "Managed Device"
+      ]
+    },
+    {
+      "ports": [
+        5060
+      ],
+      "labels": [
+        "VoIP Device",
+        "SIP Server",
+        "IP Phone"
+      ]
+    },
+    {
+      "ports": [
+        25
+      ],
+      "labels": [
+        "Mail Server",
+        "SMTP Server"
+      ]
+    },
+    {
+      "ports": [
+        110,
+        143
+      ],
+      "labels": [
+        "Mail Server",
+        "POP3/IMAP Server"
+      ]
+    },
+    {
+      "ports": [
+        3306
+      ],
+      "labels": [
+        "MySQL Server",
+        "Database Server"
+      ]
+    },
+    {
+      "ports": [
+        1433
+      ],
+      "labels": [
+        "SQL Server",
+        "Database Server"
+      ]
+    },
+    {
+      "ports": [
+        5432
+      ],
+      "labels": [
+        "PostgreSQL Server",
+        "Database Server"
+      ]
+    },
+    {
+      "ports": [
+        27017
+      ],
+      "labels": [
+        "MongoDB Server",
+        "Database Server"
+      ]
+    },
+    {
+      "ports": [
+        6379
+      ],
+      "labels": [
+        "Redis Server",
+        "Cache Server"
+      ]
+    },
+    {
+      "ports": [
+        11211
+      ],
+      "labels": [
+        "Memcached Server",
+        "Cache Server"
+      ]
+    },
+    {
+      "ports": [
+        9090,
+        9443
+      ],
+      "labels": [
+        "Management Interface",
+        "Admin Console"
+      ]
+    },
+    {
+      "ports": [
+        8086
+      ],
+      "labels": [
+        "InfluxDB",
+        "Time Series Database"
+      ]
+    },
+    {
+      "ports": [
+        8088,
+        8090
+      ],
+      "labels": [
+        "Web Interface",
+        "Admin Panel"
+      ]
+    },
+    {
+      "ports": [
+        8123
+      ],
+      "labels": [
+        "Home Assistant",
+        "Smart Home Hub"
+      ]
+    },
+    {
+      "ports": [
+        8123,
+        1883
+      ],
+      "labels": [
+        "Home Assistant",
+        "Smart Home System"
+      ]
+    },
+    {
+      "ports": [
+        1880
+      ],
+      "labels": [
+        "Node-RED",
+        "IoT Platform"
+      ]
+    },
+    {
+      "ports": [
+        1880,
+        1883
+      ],
+      "labels": [
+        "IoT Platform",
+        "Automation System"
+      ]
+    },
+    {
+      "ports": [
+        1521
+      ],
+      "labels": [
+        "Oracle DB",
+        "Database Server"
+      ]
+    },
+    {
+      "ports": [
+        5984
+      ],
+      "labels": [
+        "CouchDB",
+        "Database Server"
+      ]
+    },
+    {
+      "ports": [
+        9200,
+        9300
+      ],
+      "labels": [
+        "Elasticsearch",
+        "Search Engine"
+      ]
+    },
+    {
+      "ports": [
+        9000,
+        9200
+      ],
+      "labels": [
+        "Elasticsearch Stack",
+        "Data Platform"
+      ]
+    },
+    {
+      "ports": [
+        2181
+      ],
+      "labels": [
+        "ZooKeeper",
+        "Distributed System"
+      ]
+    },
+    {
+      "ports": [
+        2375,
+        2376
+      ],
+      "labels": [
+        "Docker",
+        "Container Platform"
+      ]
+    },
+    {
+      "ports": [
+        6443
+      ],
+      "labels": [
+        "Kubernetes",
+        "Container Orchestration"
+      ]
+    },
+    {
+      "ports": [
+        4369
+      ],
+      "labels": [
+        "RabbitMQ",
+        "Message Broker"
+      ]
+    },
+    {
+      "ports": [
+        5672
+      ],
+      "labels": [
+        "AMQP Broker",
+        "Message Queue"
+      ]
+    },
+    {
+      "ports": [
+        3000
+      ],
+      "labels": [
+        "Development Server",
+        "Web Application"
+      ]
+    },
+    {
+      "ports": [
+        8000
+      ],
+      "labels": [
+        "Web Server",
+        "Development Server"
+      ]
+    },
+    {
+      "ports": [
+        8080
+      ],
+      "labels": [
+        "Web Server",
+        "Proxy",
+        "Web Interface"
+      ]
+    },
+    {
+      "ports": [
+        8800,
+        8880
+      ],
+      "labels": [
+        "Control Panel",
+        "Management Interface"
+      ]
+    },
+    {
+      "ports": [
+        10000
+      ],
+      "labels": [
+        "Webmin",
+        "Admin Interface"
+      ]
+    },
+    {
+      "ports": [
+        10000,
+        20000
+      ],
+      "labels": [
+        "Virtual Server",
+        "Management Tools"
+      ]
+    },
+    {
+      "ports": [
+        8291,
+        8728
+      ],
+      "labels": [
+        "MikroTik Router",
+        "MikroTik API"
+      ]
+    },
+    {
+      "ports": [
+        49152,
+        52000
+      ],
+      "labels": [
+        "UPnP Device",
+        "NAT-PMP Device"
+      ]
+    },
+    {
+      "ports": [
+        5357,
+        3702
+      ],
+      "labels": [
+        "WSD Device",
+        "Microsoft Network Discovery"
+      ]
+    },
+    {
+      "ports": [
+        5222,
+        5269
+      ],
+      "labels": [
+        "XMPP Server",
+        "Chat Server"
+      ]
+    },
+    {
+      "ports": [
+        5280
+      ],
+      "labels": [
+        "XMPP Web",
+        "Chat Web Interface"
+      ]
+    },
+    {
+      "ports": [
+        6660,
+        6669
+      ],
+      "labels": [
+        "IRC Server",
+        "Chat Server"
+      ]
+    },
+    {
+      "ports": [
+        7777
+      ],
+      "labels": [
+        "Game Server",
+        "Gaming Service"
+      ]
+    },
+    {
+      "ports": [
+        27015,
+        27020
+      ],
+      "labels": [
+        "Steam Game Server",
+        "Game Service"
+      ]
+    },
+    {
+      "ports": [
+        3074
+      ],
+      "labels": [
+        "Xbox Live",
+        "Gaming Console"
+      ]
+    },
+    {
+      "ports": [
+        3478,
+        3479
+      ],
+      "labels": [
+        "PlayStation Network",
+        "Gaming Console"
+      ]
+    },
+    {
+      "ports": [
+        3478,
+        5004
+      ],
+      "labels": [
+        "VoIP NAT Traversal",
+        "Video Conferencing"
+      ]
+    },
+    {
+      "ports": [
+        5938
+      ],
+      "labels": [
+        "TeamViewer",
+        "Remote Access"
+      ]
+    },
+    {
+      "ports": [
+        1194
+      ],
+      "labels": [
+        "OpenVPN",
+        "VPN Service"
+      ]
+    },
+    {
+      "ports": [
+        500,
+        4500
+      ],
+      "labels": [
+        "IPsec VPN",
+        "VPN Service"
+      ]
+    }
+  ],
+  "hostname": [
+    {
+      "pattern": ".*iphone.*",
+      "label": "iPhone"
+    },
+    {
+      "pattern": ".*ipad.*",
+      "label": "iPad"
+    },
+    {
+      "pattern": ".*macbook.*",
+      "label": "MacBook"
+    },
+    {
+      "pattern": ".*mac.*mini.*",
+      "label": "Mac Mini"
+    },
+    {
+      "pattern": ".*imac.*",
+      "label": "iMac"
+    },
+    {
+      "pattern": ".*mbp.*",
+      "label": "MacBook Pro"
+    },
+    {
+      "pattern": ".*mba.*",
+      "label": "MacBook Air"
+    },
+    {
+      "pattern": ".*android.*",
+      "label": "Android Device"
+    },
+    {
+      "pattern": ".*galaxy.*",
+      "label": "Samsung Galaxy"
+    },
+    {
+      "pattern": ".*pixel.*",
+      "label": "Google Pixel"
+    },
+    {
+      "pattern": ".*oneplus.*",
+      "label": "OnePlus Phone"
+    },
+    {
+      "pattern": ".*xiaomi.*",
+      "label": "Xiaomi Phone"
+    },
+    {
+      "pattern": ".*redmi.*",
+      "label": "Xiaomi Redmi"
+    },
+    {
+      "pattern": ".*huawei.*",
+      "label": "Huawei Phone"
+    },
+    {
+      "pattern": ".*honor.*",
+      "label": "Honor Phone"
+    },
+    {
+      "pattern": ".*phone.*",
+      "label": "Smartphone"
+    },
+    {
+      "pattern": ".*mobile.*",
+      "label": "Mobile Device"
+    },
+    {
+      "pattern": ".*tablet.*",
+      "label": "Tablet"
+    },
+    {
+      "pattern": ".*pad.*",
+      "label": "Tablet"
+    },
+    {
+      "pattern": ".*surface.*",
+      "label": "Microsoft Surface"
+    },
+    {
+      "pattern": ".*tv.*",
+      "label": "Smart TV"
+    },
+    {
+      "pattern": ".*roku.*",
+      "label": "Roku Device"
+    },
+    {
+      "pattern": ".*firetv.*",
+      "label": "Amazon Fire TV"
+    },
+    {
+      "pattern": ".*fire-tv.*",
+      "label": "Amazon Fire TV"
+    },
+    {
+      "pattern": ".*chromecast.*",
+      "label": "Chromecast"
+    },
+    {
+      "pattern": ".*appletv.*",
+      "label": "Apple TV"
+    },
+    {
+      "pattern": ".*apple-tv.*",
+      "label": "Apple TV"
+    },
+    {
+      "pattern": ".*shield.*",
+      "label": "NVIDIA Shield"
+    },
+    {
+      "pattern": ".*echo.*",
+      "label": "Amazon Echo"
+    },
+    {
+      "pattern": ".*alexa.*",
+      "label": "Amazon Alexa"
+    },
+    {
+      "pattern": ".*homepod.*",
+      "label": "Apple HomePod"
+    },
+    {
+      "pattern": ".*nest.*",
+      "label": "Nest Device"
+    },
+    {
+      "pattern": ".*hue.*",
+      "label": "Philips Hue"
+    },
+    {
+      "pattern": ".*ring.*",
+      "label": "Ring Device"
+    },
+    {
+      "pattern": ".*cam.*",
+      "label": "Camera"
+    },
+    {
+      "pattern": ".*camera.*",
+      "label": "IP Camera"
+    },
+    {
+      "pattern": ".*doorbell.*",
+      "label": "Smart Doorbell"
+    },
+    {
+      "pattern": ".*printer.*",
+      "label": "Printer"
+    },
+    {
+      "pattern": ".*mfp.*",
+      "label": "Multi-Function Printer"
+    },
+    {
+      "pattern": ".*scanner.*",
+      "label": "Scanner"
+    },
+    {
+      "pattern": ".*xbox.*",
+      "label": "Xbox"
+    },
+    {
+      "pattern": ".*playstation.*",
+      "label": "PlayStation"
+    },
+    {
+      "pattern": ".*ps4.*",
+      "label": "PlayStation 4"
+    },
+    {
+      "pattern": ".*ps5.*",
+      "label": "PlayStation 5"
+    },
+    {
+      "pattern": ".*nintendo.*",
+      "label": "Nintendo"
+    },
+    {
+      "pattern": ".*switch.*",
+      "label": "Smart Switch"
+    },
+    {
+      "pattern": ".*laptop.*",
+      "label": "Laptop"
+    },
+    {
+      "pattern": ".*notebook.*",
+      "label": "Laptop"
+    },
+    {
+      "pattern": ".*desktop.*",
+      "label": "Desktop PC"
+    },
+    {
+      "pattern": ".*pc.*",
+      "label": "Desktop PC"
+    },
+    {
+      "pattern": ".*thinkpad.*",
+      "label": "Lenovo ThinkPad"
+    },
+    {
+      "pattern": ".*thinkcentre.*",
+      "label": "Lenovo ThinkCentre"
+    },
+    {
+      "pattern": ".*precision.*",
+      "label": "Dell Precision"
+    },
+    {
+      "pattern": ".*optiplex.*",
+      "label": "Dell OptiPlex"
+    },
+    {
+      "pattern": ".*latitude.*",
+      "label": "Dell Latitude"
+    },
+    {
+      "pattern": ".*xps.*",
+      "label": "Dell XPS"
+    },
+    {
+      "pattern": ".*inspiron.*",
+      "label": "Dell Inspiron"
+    },
+    {
+      "pattern": ".*hp.*elitebook.*",
+      "label": "HP EliteBook"
+    },
+    {
+      "pattern": ".*hp.*probook.*",
+      "label": "HP ProBook"
+    },
+    {
+      "pattern": ".*hp.*envy.*",
+      "label": "HP Envy"
+    },
+    {
+      "pattern": ".*hp.*pavilion.*",
+      "label": "HP Pavilion"
+    },
+    {
+      "pattern": ".*spectre.*",
+      "label": "HP Spectre"
+    },
+    {
+      "pattern": ".*zenbook.*",
+      "label": "ASUS ZenBook"
+    },
+    {
+      "pattern": ".*vivobook.*",
+      "label": "ASUS VivoBook"
+    },
+    {
+      "pattern": ".*router.*",
+      "label": "Router"
+    },
+    {
+      "pattern": ".*gateway.*",
+      "label": "Gateway"
+    },
+    {
+      "pattern": ".*modem.*",
+      "label": "Modem"
+    },
+    {
+      "pattern": ".*ap.*",
+      "label": "Access Point"
+    },
+    {
+      "pattern": ".*access-point.*",
+      "label": "Access Point"
+    },
+    {
+      "pattern": ".*hub.*",
+      "label": "Smart Hub"
+    },
+    {
+      "pattern": ".*bridge.*",
+      "label": "Network Bridge"
+    },
+    {
+      "pattern": ".*nas.*",
+      "label": "NAS"
+    },
+    {
+      "pattern": ".*storage.*",
+      "label": "Storage Device"
+    },
+    {
+      "pattern": ".*synology.*",
+      "label": "Synology NAS"
+    },
+    {
+      "pattern": ".*qnap.*",
+      "label": "QNAP NAS"
+    },
+    {
+      "pattern": ".*wd.*my.*cloud.*",
+      "label": "WD My Cloud"
+    },
+    {
+      "pattern": ".*diskstation.*",
+      "label": "Synology DiskStation"
+    },
+    {
+      "pattern": ".*server.*",
+      "label": "Server"
+    },
+    {
+      "pattern": ".*vmware.*",
+      "label": "VMware Server"
+    },
+    {
+      "pattern": ".*esxi.*",
+      "label": "VMware ESXi"
+    },
+    {
+      "pattern": ".*proxmox.*",
+      "label": "Proxmox Server"
+    },
+    {
+      "pattern": ".*unraid.*",
+      "label": "Unraid Server"
+    },
+    {
+      "pattern": ".*raspberry.*",
+      "label": "Raspberry Pi"
+    },
+    {
+      "pattern": ".*pi.*",
+      "label": "Raspberry Pi"
+    },
+    {
+      "pattern": ".*arduino.*",
+      "label": "Arduino"
+    },
+    {
+      "pattern": ".*esp.*",
+      "label": "ESP Device"
+    },
+    {
+      "pattern": ".*watch.*",
+      "label": "Smart Watch"
+    },
+    {
+      "pattern": ".*applew.*",
+      "label": "Apple Watch"
+    },
+    {
+      "pattern": ".*fitbit.*",
+      "label": "Fitbit"
+    },
+    {
+      "pattern": ".*garmin.*",
+      "label": "Garmin Watch"
+    },
+    {
+      "pattern": ".*refrigerator.*",
+      "label": "Smart Refrigerator"
+    },
+    {
+      "pattern": ".*fridge.*",
+      "label": "Smart Refrigerator"
+    },
+    {
+      "pattern": ".*oven.*",
+      "label": "Smart Oven"
+    },
+    {
+      "pattern": ".*microwave.*",
+      "label": "Smart Microwave"
+    },
+    {
+      "pattern": ".*cooker.*",
+      "label": "Smart Cooker"
+    },
+    {
+      "pattern": ".*washer.*",
+      "label": "Smart Washer"
+    },
+    {
+      "pattern": ".*dryer.*",
+      "label": "Smart Dryer"
+    },
+    {
+      "pattern": ".*dishwasher.*",
+      "label": "Smart Dishwasher"
+    },
+    {
+      "pattern": ".*thermostat.*",
+      "label": "Smart Thermostat"
+    },
+    {
+      "pattern": ".*air.*purifier.*",
+      "label": "Air Purifier"
+    },
+    {
+      "pattern": ".*vacuum.*",
+      "label": "Robot Vacuum"
+    },
+    {
+      "pattern": ".*roomba.*",
+      "label": "iRobot Roomba"
+    },
+    {
+      "pattern": ".*speaker.*",
+      "label": "Smart Speaker"
+    },
+    {
+      "pattern": ".*soundbar.*",
+      "label": "Soundbar"
+    },
+    {
+      "pattern": ".*amplifier.*",
+      "label": "Amplifier"
+    },
+    {
+      "pattern": ".*receiver.*",
+      "label": "AV Receiver"
+    },
+    {
+      "pattern": ".*sonos.*",
+      "label": "Sonos Speaker"
+    },
+    {
+      "pattern": ".*bose.*",
+      "label": "Bose Speaker"
+    },
+    {
+      "pattern": ".*denon.*",
+      "label": "Denon Device"
+    },
+    {
+      "pattern": ".*onkyo.*",
+      "label": "Onkyo Device"
+    },
+    {
+      "pattern": ".*yamaha.*",
+      "label": "Yamaha Device"
+    },
+    {
+      "pattern": ".*lock.*",
+      "label": "Smart Lock"
+    },
+    {
+      "pattern": ".*light.*",
+      "label": "Smart Light"
+    },
+    {
+      "pattern": ".*bulb.*",
+      "label": "Smart Bulb"
+    },
+    {
+      "pattern": ".*strip.*",
+      "label": "LED Strip"
+    },
+    {
+      "pattern": ".*fan.*",
+      "label": "Smart Fan"
+    },
+    {
+      "pattern": ".*curtain.*",
+      "label": "Smart Curtain"
+    },
+    {
+      "pattern": ".*blind.*",
+      "label": "Smart Blind"
+    },
+    {
+      "pattern": ".*shutter.*",
+      "label": "Smart Shutter"
+    },
+    {
+      "pattern": ".*siren.*",
+      "label": "Smart Siren"
+    },
+    {
+      "pattern": ".*sensor.*",
+      "label": "Sensor"
+    },
+    {
+      "pattern": ".*motion.*",
+      "label": "Motion Sensor"
+    },
+    {
+      "pattern": ".*contact.*",
+      "label": "Contact Sensor"
+    },
+    {
+      "pattern": ".*smoke.*",
+      "label": "Smoke Detector"
+    },
+    {
+      "pattern": ".*co.*detector.*",
+      "label": "CO Detector"
+    },
+    {
+      "pattern": ".*water.*leak.*",
+      "label": "Water Leak Sensor"
+    },
+    {
+      "pattern": ".*temp.*",
+      "label": "Temperature Sensor"
+    },
+    {
+      "pattern": ".*humidity.*",
+      "label": "Humidity Sensor"
+    },
+    {
+      "pattern": ".*presence.*",
+      "label": "Presence Sensor"
+    },
+    {
+      "pattern": ".*plug.*",
+      "label": "Smart Plug"
+    },
+    {
+      "pattern": ".*outlet.*",
+      "label": "Smart Outlet"
+    },
+    {
+      "pattern": ".*wall.*socket.*",
+      "label": "Wall Socket"
+    }
+  ],
+  "http_signature": [
+    {
+      "pattern": ".*mikrotik.*",
+      "label": "Mikrotik Router"
+    },
+    {
+      "pattern": ".*ubiquiti.*",
+      "label": "Ubiquiti Device"
+    },
+    {
+      "pattern": ".*unifi.*",
+      "label": "Ubiquiti UniFi"
+    },
+    {
+      "pattern": ".*edgeos.*",
+      "label": "Ubiquiti EdgeOS"
+    },
+    {
+      "pattern": ".*edge.*os.*",
+      "label": "Ubiquiti EdgeOS"
+    },
+    {
+      "pattern": ".*synology.*",
+      "label": "Synology NAS"
+    },
+    {
+      "pattern": ".*diskstation.*",
+      "label": "Synology DiskStation"
+    },
+    {
+      "pattern": ".*qnap.*",
+      "label": "QNAP NAS"
+    },
+    {
+      "pattern": ".*asus.*rt.*",
+      "label": "Asus Router"
+    },
+    {
+      "pattern": ".*dd-wrt.*",
+      "label": "DD-WRT Router"
+    },
+    {
+      "pattern": ".*openwrt.*",
+      "label": "OpenWRT Router"
+    },
+    {
+      "pattern": ".*tomato.*",
+      "label": "Tomato Router"
+    },
+    {
+      "pattern": ".*merlin.*",
+      "label": "Asuswrt-Merlin Router"
+    },
+    {
+      "pattern": ".*linksys.*",
+      "label": "Linksys Router"
+    },
+    {
+      "pattern": ".*cisco.*",
+      "label": "Cisco Device"
+    },
+    {
+      "pattern": ".*tp-link.*",
+      "label": "TP-Link Device"
+    },
+    {
+      "pattern": ".*tplink.*",
+      "label": "TP-Link Device"
+    },
+    {
+      "pattern": ".*netgear.*",
+      "label": "Netgear Device"
+    },
+    {
+      "pattern": ".*d-link.*",
+      "label": "D-Link Device"
+    },
+    {
+      "pattern": ".*dlink.*",
+      "label": "D-Link Device"
+    },
+    {
+      "pattern": ".*hikvision.*",
+      "label": "Hikvision Camera"
+    },
+    {
+      "pattern": ".*dahua.*",
+      "label": "Dahua Camera"
+    },
+    {
+      "pattern": ".*axis.*",
+      "label": "Axis Camera"
+    },
+    {
+      "pattern": ".*foscam.*",
+      "label": "Foscam Camera"
+    },
+    {
+      "pattern": ".*reolink.*",
+      "label": "Reolink Camera"
+    },
+    {
+      "pattern": ".*amcrest.*",
+      "label": "Amcrest Camera"
+    },
+    {
+      "pattern": ".*wyze.*",
+      "label": "Wyze Device"
+    },
+    {
+      "pattern": ".*arlo.*",
+      "label": "Arlo Camera"
+    },
+    {
+      "pattern": ".*ring.*",
+      "label": "Ring Device"
+    },
+    {
+      "pattern": ".*doorbell.*",
+      "label": "Smart Doorbell"
+    },
+    {
+      "pattern": ".*philips.*hue.*",
+      "label": "Philips Hue"
+    },
+    {
+      "pattern": ".*hue.*bridge.*",
+      "label": "Philips Hue Bridge"
+    },
+    {
+      "pattern": ".*lifx.*",
+      "label": "LIFX Light"
+    },
+    {
+      "pattern": ".*wemo.*",
+      "label": "Belkin WeMo"
+    },
+    {
+      "pattern": ".*sonos.*",
+      "label": "Sonos Speaker"
+    },
+    {
+      "pattern": ".*bose.*",
+      "label": "Bose Device"
+    },
+    {
+      "pattern": ".*denon.*",
+      "label": "Denon Device"
+    },
+    {
+      "pattern": ".*yamaha.*",
+      "label": "Yamaha Device"
+    },
+    {
+      "pattern": ".*samsung.*tv.*",
+      "label": "Samsung TV"
+    },
+    {
+      "pattern": ".*lg.*webos.*",
+      "label": "LG WebOS TV"
+    },
+    {
+      "pattern": ".*vizio.*",
+      "label": "Vizio TV"
+    },
+    {
+      "pattern": ".*roku.*",
+      "label": "Roku Device"
+    },
+    {
+      "pattern": ".*chromecast.*",
+      "label": "Google Chromecast"
+    },
+    {
+      "pattern": ".*apple.*tv.*",
+      "label": "Apple TV"
+    },
+    {
+      "pattern": ".*fire.*tv.*",
+      "label": "Amazon Fire TV"
+    },
+    {
+      "pattern": ".*nvidia.*shield.*",
+      "label": "NVIDIA Shield"
+    },
+    {
+      "pattern": ".*playstation.*",
+      "label": "PlayStation"
+    },
+    {
+      "pattern": ".*xbox.*",
+      "label": "Xbox"
+    },
+    {
+      "pattern": ".*nintendo.*",
+      "label": "Nintendo Device"
+    },
+    {
+      "pattern": ".*hp.*",
+      "label": "HP Printer"
+    },
+    {
+      "pattern": ".*canon.*",
+      "label": "Canon Printer"
+    },
+    {
+      "pattern": ".*epson.*",
+      "label": "Epson Printer"
+    },
+    {
+      "pattern": ".*brother.*",
+      "label": "Brother Printer"
+    },
+    {
+      "pattern": ".*lexmark.*",
+      "label": "Lexmark Printer"
+    },
+    {
+      "pattern": ".*xerox.*",
+      "label": "Xerox Printer"
+    },
+    {
+      "pattern": ".*ricoh.*",
+      "label": "Ricoh Printer"
+    },
+    {
+      "pattern": ".*kyocera.*",
+      "label": "Kyocera Printer"
+    },
+    {
+      "pattern": ".*nest.*",
+      "label": "Nest Device"
+    },
+    {
+      "pattern": ".*thermostat.*",
+      "label": "Smart Thermostat"
+    },
+    {
+      "pattern": ".*ecobee.*",
+      "label": "Ecobee Thermostat"
+    },
+    {
+      "pattern": ".*honeywell.*",
+      "label": "Honeywell Device"
+    },
+    {
+      "pattern": ".*smartthings.*",
+      "label": "SmartThings Hub"
+    },
+    {
+      "pattern": ".*hubitat.*",
+      "label": "Hubitat Hub"
+    },
+    {
+      "pattern": ".*vera.*",
+      "label": "Vera Hub"
+    },
+    {
+      "pattern": ".*homeseer.*",
+      "label": "HomeSeer Hub"
+    },
+    {
+      "pattern": ".*home.*assistant.*",
+      "label": "Home Assistant"
+    },
+    {
+      "pattern": ".*homekit.*",
+      "label": "Apple HomeKit"
+    },
+    {
+      "pattern": ".*broadlink.*",
+      "label": "BroadLink Device"
+    },
+    {
+      "pattern": ".*tasmota.*",
+      "label": "Tasmota Device"
+    },
+    {
+      "pattern": ".*esphome.*",
+      "label": "ESPHome Device"
+    },
+    {
+      "pattern": ".*shelly.*",
+      "label": "Shelly Device"
+    },
+    {
+      "pattern": ".*tuya.*",
+      "label": "Tuya Device"
+    },
+    {
+      "pattern": ".*smart.*life.*",
+      "label": "Smart Life Device"
+    },
+    {
+      "pattern": ".*kasa.*",
+      "label": "TP-Link Kasa"
+    },
+    {
+      "pattern": ".*govee.*",
+      "label": "Govee Device"
+    },
+    {
+      "pattern": ".*meross.*",
+      "label": "Meross Device"
+    },
+    {
+      "pattern": ".*eufy.*",
+      "label": "Eufy Device"
+    }
+  ],
+  "snmp_signature": [
+    {
+      "pattern": ".*cisco.*ios.*",
+      "label": "Cisco IOS"
+    },
+    {
+      "pattern": ".*router.*",
+      "label": "Router"
+    },
+    {
+      "pattern": ".*switch.*",
+      "label": "Network Switch"
+    },
+    {
+      "pattern": ".*firewall.*",
+      "label": "Firewall"
+    },
+    {
+      "pattern": ".*printer.*",
+      "label": "Printer"
+    },
+    {
+      "pattern": ".*storage.*",
+      "label": "Storage Device"
+    },
+    {
+      "pattern": ".*camera.*",
+      "label": "IP Camera"
+    },
+    {
+      "pattern": ".*ups.*",
+      "label": "UPS"
+    },
+    {
+      "pattern": ".*server.*",
+      "label": "Server"
+    },
+    {
+      "pattern": ".*workstation.*",
+      "label": "Workstation"
+    },
+    {
+      "pattern": ".*terminal.*",
+      "label": "Terminal"
+    },
+    {
+      "pattern": ".*access.*point.*",
+      "label": "Access Point"
+    },
+    {
+      "pattern": ".*bridge.*",
+      "label": "Network Bridge"
+    },
+    {
+      "pattern": ".*gateway.*",
+      "label": "Gateway"
+    },
+    {
+      "pattern": ".*modem.*",
+      "label": "Modem"
+    },
+    {
+      "pattern": ".*pbx.*",
+      "label": "PBX System"
+    },
+    {
+      "pattern": ".*voip.*",
+      "label": "VoIP Device"
+    },
+    {
+      "pattern": ".*ip.*phone.*",
+      "label": "IP Phone"
+    },
+    {
+      "pattern": ".*load.*balancer.*",
+      "label": "Load Balancer"
+    },
+    {
+      "pattern": ".*appliance.*",
+      "label": "Network Appliance"
+    },
+    {
+      "pattern": ".*controller.*",
+      "label": "Controller"
+    },
+    {
+      "pattern": ".*hub.*",
+      "label": "Hub"
+    },
+    {
+      "pattern": ".*repeater.*",
+      "label": "Repeater"
+    },
+    {
+      "pattern": ".*nas.*",
+      "label": "NAS"
+    },
+    {
+      "pattern": ".*san.*",
+      "label": "SAN"
+    },
+    {
+      "pattern": ".*media.*converter.*",
+      "label": "Media Converter"
+    },
+    {
+      "pattern": ".*kvm.*",
+      "label": "KVM Switch"
+    },
+    {
+      "pattern": ".*pdu.*",
+      "label": "PDU"
+    }
+  ],
+  "service_signature": {
+    "ssh": [
+      {
+        "pattern": ".*openssh.*",
+        "label": "OpenSSH Server"
+      },
+      {
+        "pattern": ".*dropbear.*",
+        "label": "Dropbear SSH"
+      },
+      {
+        "pattern": ".*cisco.*",
+        "label": "Cisco Device"
+      },
+      {
+        "pattern": ".*mikrotik.*",
+        "label": "Mikrotik Router"
+      },
+      {
+        "pattern": ".*ubiquiti.*",
+        "label": "Ubiquiti Device"
+      },
+      {
+        "pattern": ".*synology.*",
+        "label": "Synology NAS"
+      },
+      {
+        "pattern": ".*qnap.*",
+        "label": "QNAP NAS"
+      },
+      {
+        "pattern": ".*asustor.*",
+        "label": "Asustor NAS"
+      },
+      {
+        "pattern": ".*freenas.*",
+        "label": "FreeNAS Server"
+      },
+      {
+        "pattern": ".*truenas.*",
+        "label": "TrueNAS Server"
+      },
+      {
+        "pattern": ".*openwrt.*",
+        "label": "OpenWRT Router"
+      },
+      {
+        "pattern": ".*debian.*",
+        "label": "Debian Linux"
+      },
+      {
+        "pattern": ".*ubuntu.*",
+        "label": "Ubuntu Linux"
+      },
+      {
+        "pattern": ".*centos.*",
+        "label": "CentOS Linux"
+      },
+      {
+        "pattern": ".*fedora.*",
+        "label": "Fedora Linux"
+      },
+      {
+        "pattern": ".*redhat.*",
+        "label": "Red Hat Linux"
+      },
+      {
+        "pattern": ".*raspbian.*",
+        "label": "Raspberry Pi"
+      }
+    ],
+    "http": [
+      {
+        "pattern": ".*apache.*",
+        "label": "Apache Web Server"
+      },
+      {
+        "pattern": ".*nginx.*",
+        "label": "Nginx Web Server"
+      },
+      {
+        "pattern": ".*iis.*",
+        "label": "Microsoft IIS"
+      },
+      {
+        "pattern": ".*lighttpd.*",
+        "label": "Lighttpd Web Server"
+      },
+      {
+        "pattern": ".*node\\.js.*",
+        "label": "Node.js Server"
+      },
+      {
+        "pattern": ".*tomcat.*",
+        "label": "Apache Tomcat"
+      },
+      {
+        "pattern": ".*weblogic.*",
+        "label": "Oracle WebLogic"
+      },
+      {
+        "pattern": ".*websphere.*",
+        "label": "IBM WebSphere"
+      },
+      {
+        "pattern": ".*jetty.*",
+        "label": "Jetty Web Server"
+      },
+      {
+        "pattern": ".*cherokee.*",
+        "label": "Cherokee Web Server"
+      },
+      {
+        "pattern": ".*caddy.*",
+        "label": "Caddy Web Server"
+      },
+      {
+        "pattern": ".*traefik.*",
+        "label": "Traefik Proxy"
+      },
+      {
+        "pattern": ".*synology.*",
+        "label": "Synology NAS"
+      },
+      {
+        "pattern": ".*qnap.*",
+        "label": "QNAP NAS"
+      },
+      {
+        "pattern": ".*mikrotik.*",
+        "label": "Mikrotik Router"
+      },
+      {
+        "pattern": ".*ubiquiti.*",
+        "label": "Ubiquiti Device"
+      },
+      {
+        "pattern": ".*sonicwall.*",
+        "label": "SonicWall Firewall"
+      },
+      {
+        "pattern": ".*pfsense.*",
+        "label": "pfSense Firewall"
+      },
+      {
+        "pattern": ".*opnsense.*",
+        "label": "OPNsense Firewall"
+      },
+      {
+        "pattern": ".*fortinet.*",
+        "label": "Fortinet Device"
+      },
+      {
+        "pattern": ".*juniper.*",
+        "label": "Juniper Device"
+      },
+      {
+        "pattern": ".*cloudflare.*",
+        "label": "Cloudflare"
+      },
+      {
+        "pattern": ".*akamai.*",
+        "label": "Akamai"
+      },
+      {
+        "pattern": ".*fastly.*",
+        "label": "Fastly"
+      },
+      {
+        "pattern": ".*aws.*",
+        "label": "AWS Service"
+      },
+      {
+        "pattern": ".*azure.*",
+        "label": "Azure Service"
+      },
+      {
+        "pattern": ".*gcp.*",
+        "label": "Google Cloud"
+      },
+      {
+        "pattern": ".*wordpress.*",
+        "label": "WordPress Site"
+      },
+      {
+        "pattern": ".*joomla.*",
+        "label": "Joomla Site"
+      },
+      {
+        "pattern": ".*drupal.*",
+        "label": "Drupal Site"
+      },
+      {
+        "pattern": ".*magento.*",
+        "label": "Magento Site"
+      },
+      {
+        "pattern": ".*shopify.*",
+        "label": "Shopify Site"
+      },
+      {
+        "pattern": ".*woocommerce.*",
+        "label": "WooCommerce Site"
+      },
+      {
+        "pattern": ".*prestashop.*",
+        "label": "PrestaShop Site"
+      },
+      {
+        "pattern": ".*confluence.*",
+        "label": "Atlassian Confluence"
+      },
+      {
+        "pattern": ".*jira.*",
+        "label": "Atlassian Jira"
+      },
+      {
+        "pattern": ".*gitlab.*",
+        "label": "GitLab"
+      },
+      {
+        "pattern": ".*github.*",
+        "label": "GitHub"
+      },
+      {
+        "pattern": ".*jenkins.*",
+        "label": "Jenkins"
+      },
+      {
+        "pattern": ".*grafana.*",
+        "label": "Grafana"
+      },
+      {
+        "pattern": ".*prometheus.*",
+        "label": "Prometheus"
+      },
+      {
+        "pattern": ".*kibana.*",
+        "label": "Kibana"
+      },
+      {
+        "pattern": ".*elasticsearch.*",
+        "label": "Elasticsearch"
+      },
+      {
+        "pattern": ".*influxdb.*",
+        "label": "InfluxDB"
+      },
+      {
+        "pattern": ".*plesk.*",
+        "label": "Plesk Control Panel"
+      },
+      {
+        "pattern": ".*cpanel.*",
+        "label": "cPanel Control Panel"
+      },
+      {
+        "pattern": ".*webmin.*",
+        "label": "Webmin Control Panel"
+      },
+      {
+        "pattern": ".*directadmin.*",
+        "label": "DirectAdmin Control Panel"
+      }
+    ],
+    "rtsp": [
+      {
+        "pattern": ".*hikvision.*",
+        "label": "Hikvision Camera"
+      },
+      {
+        "pattern": ".*dahua.*",
+        "label": "Dahua Camera"
+      },
+      {
+        "pattern": ".*axis.*",
+        "label": "Axis Camera"
+      },
+      {
+        "pattern": ".*foscam.*",
+        "label": "Foscam Camera"
+      },
+      {
+        "pattern": ".*reolink.*",
+        "label": "Reolink Camera"
+      },
+      {
+        "pattern": ".*amcrest.*",
+        "label": "Amcrest Camera"
+      },
+      {
+        "pattern": ".*wyze.*",
+        "label": "Wyze Camera"
+      },
+      {
+        "pattern": ".*arlo.*",
+        "label": "Arlo Camera"
+      },
+      {
+        "pattern": ".*uniview.*",
+        "label": "Uniview Camera"
+      },
+      {
+        "pattern": ".*lorex.*",
+        "label": "Lorex Camera"
+      },
+      {
+        "pattern": ".*swann.*",
+        "label": "Swann Camera"
+      },
+      {
+        "pattern": ".*vivotek.*",
+        "label": "Vivotek Camera"
+      },
+      {
+        "pattern": ".*geovision.*",
+        "label": "GeoVision Camera"
+      },
+      {
+        "pattern": ".*tvt.*",
+        "label": "TVT Camera"
+      },
+      {
+        "pattern": ".*qvis.*",
+        "label": "QVIS Camera"
+      },
+      {
+        "pattern": ".*bosch.*",
+        "label": "Bosch Camera"
+      },
+      {
+        "pattern": ".*hanwha.*",
+        "label": "Hanwha Camera"
+      },
+      {
+        "pattern": ".*wisenet.*",
+        "label": "Wisenet Camera"
+      },
+      {
+        "pattern": ".*ezviz.*",
+        "label": "EZVIZ Camera"
+      },
+      {
+        "pattern": ".*annke.*",
+        "label": "ANNKE Camera"
+      },
+      {
+        "pattern": ".*zosi.*",
+        "label": "ZOSI Camera"
+      },
+      {
+        "pattern": ".*sannce.*",
+        "label": "SANNCE Camera"
+      },
+      {
+        "pattern": ".*tplink.*",
+        "label": "TP-Link Camera"
+      },
+      {
+        "pattern": ".*yi.*",
+        "label": "Yi Camera"
+      },
+      {
+        "pattern": ".*honeywell.*",
+        "label": "Honeywell Camera"
+      },
+      {
+        "pattern": ".*merkury.*",
+        "label": "Merkury Camera"
+      },
+      {
+        "pattern": ".*zmodo.*",
+        "label": "Zmodo Camera"
+      },
+      {
+        "pattern": ".*sercomm.*",
+        "label": "Sercomm Camera"
+      },
+      {
+        "pattern": ".*nvr.*",
+        "label": "NVR System"
+      },
+      {
+        "pattern": ".*dvr.*",
+        "label": "DVR System"
+      }
+    ],
+    "upnp": [
+      {
+        "pattern": ".*router.*",
+        "label": "UPnP Router"
+      },
+      {
+        "pattern": ".*nas.*",
+        "label": "UPnP NAS"
+      },
+      {
+        "pattern": ".*media.*server.*",
+        "label": "Media Server"
+      },
+      {
+        "pattern": ".*tv.*",
+        "label": "Smart TV"
+      },
+      {
+        "pattern": ".*gateway.*",
+        "label": "Internet Gateway"
+      },
+      {
+        "pattern": ".*igd.*",
+        "label": "Internet Gateway Device"
+      },
+      {
+        "pattern": ".*playstation.*",
+        "label": "PlayStation"
+      },
+      {
+        "pattern": ".*xbox.*",
+        "label": "Xbox"
+      },
+      {
+        "pattern": ".*wmp.*",
+        "label": "Windows Media Player"
+      },
+      {
+        "pattern": ".*dlna.*",
+        "label": "DLNA Device"
+      },
+      {
+        "pattern": ".*philips.*",
+        "label": "Philips Device"
+      },
+      {
+        "pattern": ".*samsung.*",
+        "label": "Samsung Device"
+      },
+      {
+        "pattern": ".*sony.*",
+        "label": "Sony Device"
+      },
+      {
+        "pattern": ".*lg.*",
+        "label": "LG Device"
+      },
+      {
+        "pattern": ".*panasonic.*",
+        "label": "Panasonic Device"
+      },
+      {
+        "pattern": ".*pioneer.*",
+        "label": "Pioneer Device"
+      },
+      {
+        "pattern": ".*denon.*",
+        "label": "Denon Device"
+      },
+      {
+        "pattern": ".*onkyo.*",
+        "label": "Onkyo Device"
+      },
+      {
+        "pattern": ".*yamaha.*",
+        "label": "Yamaha Device"
+      },
+      {
+        "pattern": ".*marantz.*",
+        "label": "Marantz Device"
+      },
+      {
+        "pattern": ".*bose.*",
+        "label": "Bose Device"
+      },
+      {
+        "pattern": ".*sonos.*",
+        "label": "Sonos Speaker"
+      },
+      {
+        "pattern": ".*heos.*",
+        "label": "HEOS Speaker"
+      },
+      {
+        "pattern": ".*chromecast.*",
+        "label": "Chromecast"
+      },
+      {
+        "pattern": ".*roku.*",
+        "label": "Roku Device"
+      },
+      {
+        "pattern": ".*kodi.*",
+        "label": "Kodi Media Center"
+      },
+      {
+        "pattern": ".*plex.*",
+        "label": "Plex Media Server"
+      },
+      {
+        "pattern": ".*emby.*",
+        "label": "Emby Media Server"
+      },
+      {
+        "pattern": ".*jellyfin.*",
+        "label": "Jellyfin Media Server"
+      },
+      {
+        "pattern": ".*universal.*media.*server.*",
+        "label": "Universal Media Server"
+      },
+      {
+        "pattern": ".*serviio.*",
+        "label": "Serviio Media Server"
+      },
+      {
+        "pattern": ".*twonky.*",
+        "label": "Twonky Media Server"
+      },
+      {
+        "pattern": ".*western.*digital.*",
+        "label": "Western Digital Device"
+      },
+      {
+        "pattern": ".*wd.*",
+        "label": "Western Digital Device"
+      },
+      {
+        "pattern": ".*seagate.*",
+        "label": "Seagate Device"
+      },
+      {
+        "pattern": ".*buffalo.*",
+        "label": "Buffalo Device"
+      },
+      {
+        "pattern": ".*toshiba.*",
+        "label": "Toshiba Device"
+      },
+      {
+        "pattern": ".*lacie.*",
+        "label": "LaCie Device"
+      },
+      {
+        "pattern": ".*netgear.*",
+        "label": "Netgear Device"
+      },
+      {
+        "pattern": ".*synology.*",
+        "label": "Synology Device"
+      },
+      {
+        "pattern": ".*qnap.*",
+        "label": "QNAP Device"
+      }
+    ],
+    "mdns": [
+      {
+        "pattern": ".*airplay.*",
+        "label": "AirPlay Device"
+      },
+      {
+        "pattern": ".*apple.*tv.*",
+        "label": "Apple TV"
+      },
+      {
+        "pattern": ".*homekit.*",
+        "label": "HomeKit Device"
+      },
+      {
+        "pattern": ".*chromecast.*",
+        "label": "Chromecast"
+      },
+      {
+        "pattern": ".*google.*home.*",
+        "label": "Google Home"
+      },
+      {
+        "pattern": ".*google.*nest.*",
+        "label": "Google Nest"
+      },
+      {
+        "pattern": ".*sonos.*",
+        "label": "Sonos Speaker"
+      },
+      {
+        "pattern": ".*bose.*",
+        "label": "Bose Speaker"
+      },
+      {
+        "pattern": ".*yamaha.*",
+        "label": "Yamaha Device"
+      },
+      {
+        "pattern": ".*denon.*",
+        "label": "Denon Device"
+      },
+      {
+        "pattern": ".*heos.*",
+        "label": "HEOS Speaker"
+      },
+      {
+        "pattern": ".*marantz.*",
+        "label": "Marantz Device"
+      },
+      {
+        "pattern": ".*onkyo.*",
+        "label": "Onkyo Device"
+      },
+      {
+        "pattern": ".*pioneer.*",
+        "label": "Pioneer Device"
+      },
+      {
+        "pattern": ".*philips.*hue.*",
+        "label": "Philips Hue"
+      },
+      {
+        "pattern": ".*lifx.*",
+        "label": "LIFX Light"
+      },
+      {
+        "pattern": ".*wemo.*",
+        "label": "Belkin WeMo"
+      },
+      {
+        "pattern": ".*lutron.*",
+        "label": "Lutron Device"
+      },
+      {
+        "pattern": ".*apple.*device.*",
+        "label": "Apple Device"
+      },
+      {
+        "pattern": ".*iphone.*",
+        "label": "iPhone"
+      },
+      {
+        "pattern": ".*ipad.*",
+        "label": "iPad"
+      },
+      {
+        "pattern": ".*ipod.*",
+        "label": "iPod"
+      },
+      {
+        "pattern": ".*macbook.*",
+        "label": "MacBook"
+      },
+      {
+        "pattern": ".*imac.*",
+        "label": "iMac"
+      },
+      {
+        "pattern": ".*mac.*mini.*",
+        "label": "Mac Mini"
+      },
+      {
+        "pattern": ".*mac.*pro.*",
+        "label": "Mac Pro"
+      },
+      {
+        "pattern": ".*time.*capsule.*",
+        "label": "Time Capsule"
+      },
+      {
+        "pattern": ".*airport.*",
+        "label": "AirPort Base Station"
+      },
+      {
+        "pattern": ".*printer.*",
+        "label": "Network Printer"
+      },
+      {
+        "pattern": ".*scanner.*",
+        "label": "Network Scanner"
+      },
+      {
+        "pattern": ".*canon.*",
+        "label": "Canon Device"
+      },
+      {
+        "pattern": ".*hp.*",
+        "label": "HP Device"
+      },
+      {
+        "pattern": ".*epson.*",
+        "label": "Epson Device"
+      },
+      {
+        "pattern": ".*brother.*",
+        "label": "Brother Device"
+      },
+      {
+        "pattern": ".*lexmark.*",
+        "label": "Lexmark Device"
+      },
+      {
+        "pattern": ".*ricoh.*",
+        "label": "Ricoh Device"
+      },
+      {
+        "pattern": ".*synology.*",
+        "label": "Synology NAS"
+      },
+      {
+        "pattern": ".*qnap.*",
+        "label": "QNAP NAS"
+      },
+      {
+        "pattern": ".*raspberry.*pi.*",
+        "label": "Raspberry Pi"
+      },
+      {
+        "pattern": ".*home.*assistant.*",
+        "label": "Home Assistant"
+      },
+      {
+        "pattern": ".*homebridge.*",
+        "label": "Homebridge"
+      },
+      {
+        "pattern": ".*esphome.*",
+        "label": "ESPHome Device"
+      },
+      {
+        "pattern": ".*tasmota.*",
+        "label": "Tasmota Device"
+      },
+      {
+        "pattern": ".*shelly.*",
+        "label": "Shelly Device"
+      }
+    ]
+  }
+}
