@@ -2,7 +2,7 @@
 
 use crate::domain::device::{DeviceIdentity, DeviceRecord};
 use crate::domain::logs::LogEntry;
-use crate::domain::settings::Settings;
+use crate::domain::settings::{ScanKind, Settings};
 use anyhow::Result;
 use chrono::{DateTime, Utc};
 use std::collections::VecDeque;
@@ -17,6 +17,14 @@ pub struct AppState {
     pub logs: VecDeque<LogEntry>,
     pub settings: Settings,
     pub last_refresh: Option<DateTime<Utc>>,
+    pub ongoing_scan: Option<ScanStatus>,
+}
+
+/// Información sobre un escaneo actualmente en progreso.
+#[derive(Debug, Clone)]
+pub struct ScanStatus {
+    pub mode: ScanKind,
+    pub started_at: DateTime<Utc>,
 }
 
 impl AppState {
@@ -27,6 +35,7 @@ impl AppState {
             logs: VecDeque::with_capacity(MAX_LOG_ENTRIES),
             settings: Settings::default(),
             last_refresh: None,
+            ongoing_scan: None,
         })
     }
 
@@ -67,5 +76,18 @@ impl AppState {
         {
             device.blocked = blocked;
         }
+    }
+
+    /// Marca que un escaneo de red está en progreso.
+    pub fn set_scan_in_progress(&mut self, mode: ScanKind) {
+        self.ongoing_scan = Some(ScanStatus {
+            mode,
+            started_at: Utc::now(),
+        });
+    }
+
+    /// Limpia el estado de escaneo activo si existe.
+    pub fn clear_scan_in_progress(&mut self) {
+        self.ongoing_scan = None;
     }
 }

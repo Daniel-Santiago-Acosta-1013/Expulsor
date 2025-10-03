@@ -104,13 +104,34 @@ impl ServiceRegistry {
     }
 
     async fn handle_scan(&self, mode: ScanKind, state: Arc<Mutex<AppState>>) -> Result<()> {
-        let map = match mode {
-            ScanKind::Quick => self.scanner.quick_scan().await?,
-            ScanKind::Deep => self.scanner.deep_scan().await?,
+        {
+            let mut guard = state.lock().await;
+            guard.set_scan_in_progress(mode);
+        }
+
+        let scan_result = match mode {
+            ScanKind::Quick => self.scanner.quick_scan().await,
+            ScanKind::Deep => self.scanner.deep_scan().await,
+        };
+
+        let map = match scan_result {
+            Ok(map) => map,
+            Err(err) => {
+                {
+                    let mut guard = state.lock().await;
+                    guard.clear_scan_in_progress();
+                    guard.push_log(LogEntry::new(
+                        LogLevel::Error,
+                        format!("Escaneo {:?} falló: {}", mode, err),
+                    ));
+                }
+                return Err(err);
+            }
         };
 
         let mut guard = state.lock().await;
         guard.update_devices(map.values().cloned().collect());
+        guard.clear_scan_in_progress();
         guard.push_log(LogEntry::new(
             LogLevel::Info,
             format!("Escaneo {:?} completado ({} dispositivos)", mode, map.len()),

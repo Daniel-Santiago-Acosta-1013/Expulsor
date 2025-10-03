@@ -12,6 +12,7 @@ use crate::domain::settings::ScanKind;
 use crate::presentation::tui::theme::Theme;
 use crate::utils::shutdown::ShutdownSignal;
 use anyhow::Result;
+use chrono::Utc;
 use crossterm::cursor::Show;
 use crossterm::event::{self, Event, KeyCode, KeyModifiers};
 use crossterm::execute;
@@ -28,6 +29,7 @@ use ratatui::Terminal;
 use std::cmp::{max, min};
 use std::io;
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 use tokio::sync::Mutex;
 
 /// Interfaz de texto que imita el estilo de herramientas como k9s pero enfocada en control de red.
@@ -38,6 +40,7 @@ pub struct Tui {
     shutdown: ShutdownSignal,
     ui: UiState,
     theme: Theme,
+    spinner: Spinner,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -63,6 +66,40 @@ impl UiState {
     }
 }
 
+const SPINNER_FRAMES: &[&str] = &["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+
+struct Spinner {
+    index: usize,
+    last_tick: Instant,
+    interval: Duration,
+}
+
+impl Default for Spinner {
+    fn default() -> Self {
+        Self {
+            index: 0,
+            last_tick: Instant::now(),
+            interval: Duration::from_millis(100),
+        }
+    }
+}
+
+impl Spinner {
+    fn frame(&mut self) -> &'static str {
+        let now = Instant::now();
+        if now.duration_since(self.last_tick) >= self.interval {
+            self.index = (self.index + 1) % SPINNER_FRAMES.len();
+            self.last_tick = now;
+        }
+        SPINNER_FRAMES[self.index]
+    }
+
+    fn reset(&mut self) {
+        self.index = 0;
+        self.last_tick = Instant::now();
+    }
+}
+
 impl Tui {
     /// Construye la TUI configurando el backend de terminal requerido.
     pub fn new(
@@ -83,6 +120,7 @@ impl Tui {
             shutdown,
             ui: UiState::new(),
             theme: Theme::default(),
+            spinner: Spinner::default(),
         })
     }
 
@@ -144,7 +182,17 @@ impl Tui {
                 self.ui.log_scroll = self.ui.log_scroll.saturating_add(1);
             }
             (_, KeyCode::Tab, _) => self.toggle_focus(),
-            (_, KeyCode::Char('r'), KeyModifiers::NONE) => {
+            (_, KeyCode::Char('r'), modifiers)
+                if modifiers.contains(KeyModifiers::CONTROL)
+                    || modifiers.contains(KeyModifiers::SUPER) =>
+            {
+                self.dispatcher
+                    .submit(AppAction::ScanNetwork {
+                        mode: ScanKind::Deep,
+                    })
+                    .await?;
+            }
+            (_, KeyCode::Char('r'), modifiers) if modifiers.is_empty() => {
                 self.dispatcher
                     .submit(AppAction::ScanNetwork {
                         mode: ScanKind::Quick,
@@ -218,6 +266,12 @@ impl Tui {
         let mut log_scroll = ui_snapshot.log_scroll;
         let selected_index = ui_snapshot.selected_index;
         let focus = ui_snapshot.focus;
+        let spinner_frame = if snapshot.ongoing_scan.is_some() {
+            Some(self.spinner.frame())
+        } else {
+            self.spinner.reset();
+            None
+        };
 
         self.terminal.draw(|frame| {
             let size = frame.size();
@@ -246,7 +300,7 @@ impl Tui {
                 &theme,
                 selected_index,
             );
-            draw_status_bar(frame, status_area, snapshot, &theme);
+            draw_status_bar(frame, status_area, snapshot, &theme, spinner_frame);
         })?;
 
         self.ui.log_scroll = log_scroll;
@@ -443,13 +497,14 @@ fn draw_status_bar(
     area: Rect,
     snapshot: &AppState,
     theme: &Theme,
+    spinner_frame: Option<&'static str>,
 ) {
     let hints = vec![
         Span::styled("[Q] Salir", theme.dimmed),
         Span::raw("  "),
         Span::styled("[R] Escaneo rápido", theme.dimmed),
         Span::raw("  "),
-        Span::styled("[Shift+R] Escaneo profundo", theme.dimmed),
+        Span::styled("[Ctrl/Cmd+R] Escaneo profundo", theme.dimmed),
         Span::raw("  "),
         Span::styled("[Enter] Detalle", theme.dimmed),
         Span::raw("  "),
@@ -468,13 +523,32 @@ fn draw_status_bar(
     let help = Paragraph::new(Line::from(hints)).wrap(Wrap { trim: true });
     frame.render_widget(help, layout[0]);
 
-    let subtitle = snapshot
-        .last_refresh
-        .map(|ts| format!("Actualizado: {}", ts.format("%H:%M:%S")))
-        .unwrap_or_else(|| "Sin escaneos previos".to_string());
+    let subtitle_line = if let Some(status) = &snapshot.ongoing_scan {
+        let spinner = spinner_frame.unwrap_or("⠋");
+        let elapsed = Utc::now()
+            .signed_duration_since(status.started_at)
+            .num_seconds()
+            .max(0);
+        let minutes = elapsed / 60;
+        let seconds = elapsed % 60;
+        let mode = match status.mode {
+            ScanKind::Quick => "rápido",
+            ScanKind::Deep => "profundo",
+        };
+        let text = format!(
+            "{} Escaneo {}… {:02}:{:02}",
+            spinner, mode, minutes, seconds
+        );
+        Line::from(Span::styled(text, theme.emphasis))
+    } else {
+        let text = snapshot
+            .last_refresh
+            .map(|ts| format!("Actualizado: {}", ts.format("%H:%M:%S")))
+            .unwrap_or_else(|| "Sin escaneos previos".to_string());
+        Line::from(Span::styled(text, theme.dimmed))
+    };
 
-    let subtitle = Paragraph::new(Line::from(Span::styled(subtitle, theme.dimmed)))
-        .alignment(Alignment::Right);
+    let subtitle = Paragraph::new(subtitle_line).alignment(Alignment::Right);
     frame.render_widget(subtitle, layout[1]);
 }
 
