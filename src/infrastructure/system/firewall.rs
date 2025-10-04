@@ -1,6 +1,8 @@
 //! Configuración de reglas de firewall específicas por plataforma.
 
 use anyhow::{Context, Result};
+#[cfg(target_os = "macos")]
+use std::process::Stdio;
 use tokio::process::Command;
 
 /// Agrega reglas para bloquear un dispositivo por su dirección IP.
@@ -22,8 +24,10 @@ pub async fn add_rule(ip: &str) -> Result<()> {
         use tokio::io::AsyncWriteExt;
         let rule = format!("block drop from {} to any", ip);
         let mut child = Command::new("pfctl")
-            .args(["-a", "com.expulsor", "-f", "-"])
+            .args(["-q", "-a", "com.expulsor", "-f", "-"])
             .stdin(std::process::Stdio::piped())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
             .spawn()
             .context("No se pudo invocar pfctl")?;
         if let Some(mut stdin) = child.stdin.take() {
@@ -88,8 +92,10 @@ pub async fn remove_rule(ip: &str) -> Result<()> {
         use tokio::io::AsyncWriteExt;
         let _ = ip;
         let mut child = Command::new("pfctl")
-            .args(["-a", "com.expulsor", "-f", "-"])
+            .args(["-q", "-a", "com.expulsor", "-f", "-"])
             .stdin(std::process::Stdio::piped())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
             .spawn()
             .context("No se pudo reiniciar pfctl")?;
         if let Some(mut stdin) = child.stdin.take() {

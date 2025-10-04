@@ -1,6 +1,8 @@
 //! Habilita o deshabilita el reenvío de paquetes IP cuando es necesario.
 
 use anyhow::{Context, Result};
+#[cfg(target_os = "macos")]
+use std::process::Stdio;
 use tokio::process::Command;
 #[cfg(target_os = "linux")]
 use tokio::task;
@@ -26,6 +28,8 @@ pub async fn enable() -> Result<Option<String>> {
         let previous = String::from_utf8_lossy(&status.stdout).trim().to_string();
         Command::new("sysctl")
             .args(["-w", "net.inet.ip.forwarding=1"])
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
             .status()
             .await
             .context("No se pudo habilitar ip forwarding")?;
@@ -59,6 +63,8 @@ pub async fn restore(previous: Option<String>) -> Result<()> {
         if let Some(state) = previous {
             Command::new("sysctl")
                 .args(["-w", &format!("net.inet.ip.forwarding={}", state.trim())])
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
                 .status()
                 .await
                 .context("No se pudo restaurar ip forwarding")?;

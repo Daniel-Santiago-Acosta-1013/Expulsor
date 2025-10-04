@@ -69,22 +69,38 @@ impl ServiceRegistry {
                 ));
             }
             AppAction::BlockDevice { identity } => {
-                self.spoofer.block(&identity).await?;
-                let mut guard = state.lock().await;
-                guard.set_block_state(&identity, true);
-                guard.push_log(LogEntry::new(
-                    LogLevel::Warn,
-                    format!("Acceso restringido para {}", identity.ip),
-                ));
+                if let Err(err) = self.spoofer.block(&identity).await {
+                    error!(?err, %identity.ip, "No se pudo bloquear dispositivo");
+                    let mut guard = state.lock().await;
+                    guard.push_log(LogEntry::new(
+                        LogLevel::Error,
+                        format!("Fallo al restringir {}: {}", identity.ip, err),
+                    ));
+                } else {
+                    let mut guard = state.lock().await;
+                    guard.set_block_state(&identity, true);
+                    guard.push_log(LogEntry::new(
+                        LogLevel::Warn,
+                        format!("Acceso restringido para {}", identity.ip),
+                    ));
+                }
             }
             AppAction::UnblockDevice { identity } => {
-                self.spoofer.unblock(&identity).await?;
-                let mut guard = state.lock().await;
-                guard.set_block_state(&identity, false);
-                guard.push_log(LogEntry::new(
-                    LogLevel::Info,
-                    format!("Acceso restaurado para {}", identity.ip),
-                ));
+                if let Err(err) = self.spoofer.unblock(&identity).await {
+                    error!(?err, %identity.ip, "No se pudo desbloquear dispositivo");
+                    let mut guard = state.lock().await;
+                    guard.push_log(LogEntry::new(
+                        LogLevel::Error,
+                        format!("Fallo al restaurar acceso {}: {}", identity.ip, err),
+                    ));
+                } else {
+                    let mut guard = state.lock().await;
+                    guard.set_block_state(&identity, false);
+                    guard.push_log(LogEntry::new(
+                        LogLevel::Info,
+                        format!("Acceso restaurado para {}", identity.ip),
+                    ));
+                }
             }
             AppAction::ToggleAggressiveMode => {
                 let mut guard = state.lock().await;
