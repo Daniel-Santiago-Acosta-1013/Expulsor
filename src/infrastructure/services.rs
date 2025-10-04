@@ -68,40 +68,48 @@ impl ServiceRegistry {
                     format!("Escaneo detallado completado para {}", identity.ip),
                 ));
             }
-            AppAction::BlockDevice { identity } => {
-                if let Err(err) = self.spoofer.block(&identity).await {
-                    error!(?err, %identity.ip, "No se pudo bloquear dispositivo");
+            AppAction::BlockDevice { identity } => match self.spoofer.block(&identity).await {
+                Ok(report) => {
                     let mut guard = state.lock().await;
-                    guard.push_log(LogEntry::new(
-                        LogLevel::Error,
-                        format!("Fallo al restringir {}: {}", identity.ip, err),
-                    ));
-                } else {
-                    let mut guard = state.lock().await;
+                    for message in report.logs {
+                        guard.push_log(LogEntry::new(LogLevel::Info, format!("{}", message)));
+                    }
                     guard.set_block_state(&identity, true);
                     guard.push_log(LogEntry::new(
                         LogLevel::Warn,
                         format!("Acceso restringido para {}", identity.ip),
                     ));
                 }
-            }
-            AppAction::UnblockDevice { identity } => {
-                if let Err(err) = self.spoofer.unblock(&identity).await {
-                    error!(?err, %identity.ip, "No se pudo desbloquear dispositivo");
+                Err(err) => {
+                    error!(?err, %identity.ip, "No se pudo bloquear dispositivo");
                     let mut guard = state.lock().await;
                     guard.push_log(LogEntry::new(
                         LogLevel::Error,
-                        format!("Fallo al restaurar acceso {}: {}", identity.ip, err),
+                        format!("Fallo al restringir {}: {}", identity.ip, err),
                     ));
-                } else {
+                }
+            },
+            AppAction::UnblockDevice { identity } => match self.spoofer.unblock(&identity).await {
+                Ok(report) => {
                     let mut guard = state.lock().await;
+                    for message in report.logs {
+                        guard.push_log(LogEntry::new(LogLevel::Info, format!("{}", message)));
+                    }
                     guard.set_block_state(&identity, false);
                     guard.push_log(LogEntry::new(
                         LogLevel::Info,
                         format!("Acceso restaurado para {}", identity.ip),
                     ));
                 }
-            }
+                Err(err) => {
+                    error!(?err, %identity.ip, "No se pudo desbloquear dispositivo");
+                    let mut guard = state.lock().await;
+                    guard.push_log(LogEntry::new(
+                        LogLevel::Error,
+                        format!("Fallo al restaurar acceso {}: {}", identity.ip, err),
+                    ));
+                }
+            },
             AppAction::ToggleAggressiveMode => {
                 let mut guard = state.lock().await;
                 guard.settings.aggressive_mode = !guard.settings.aggressive_mode;

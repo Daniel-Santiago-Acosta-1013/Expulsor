@@ -31,6 +31,16 @@ pub struct ArpSpoofer {
     firewall_ready: Arc<Mutex<bool>>,
 }
 
+#[derive(Debug, Default, Clone)]
+pub struct BlockOutcome {
+    pub logs: Vec<String>,
+}
+
+#[derive(Debug, Default, Clone)]
+pub struct UnblockOutcome {
+    pub logs: Vec<String>,
+}
+
 impl ArpSpoofer {
     /// Crea un spoofer configurado con la puerta de enlace y la interfaz local.
     pub fn new(settings: Settings) -> Result<Self> {
@@ -55,19 +65,35 @@ impl ArpSpoofer {
     }
 
     /// Inicia el bloqueo del dispositivo indicado.
-    pub async fn block(&self, identity: &DeviceIdentity) -> Result<()> {
+    pub async fn block(&self, identity: &DeviceIdentity) -> Result<BlockOutcome> {
         let settings = self.settings.lock().await.clone();
+        let mut logs = Vec::new();
+        logs.push(format!("Preparando cortafuegos para {}", identity.ip));
         self.ensure_firewall_ready().await?;
+        logs.push("Cortafuegos listo".to_string());
 
         if settings.block_mode {
+            logs.push(format!(
+                "Agregando {} a la lista de bloqueo expulsor_blocklist",
+                identity.ip
+            ));
             self.firewall.block(&identity.ip.to_string()).await?;
+            logs.push("Regla de bloqueo aplicada".to_string());
+        } else {
+            logs.push("block_mode desactivado: no se aplicó regla de firewall".to_string());
         }
 
         if settings.block_mode {
             let mut state_guard = self.ip_forward_state.lock().await;
             if state_guard.is_none() {
-                *state_guard = ip_forwarding::enable().await?;
+                let previous = ip_forwarding::enable().await?;
+                logs.push("Reenvio IP habilitado temporalmente".to_string());
+                *state_guard = previous;
+            } else {
+                logs.push("Reenvio IP ya activo".to_string());
             }
+        } else {
+            logs.push("block_mode desactivado: reenvio IP sin cambios".to_string());
         }
 
         let mut guard = self.targets.lock().await;
@@ -82,12 +108,15 @@ impl ArpSpoofer {
             },
         );
 
-        Ok(())
+        Ok(BlockOutcome { logs })
     }
 
     /// Detiene el bloqueo actual del dispositivo indicado.
-    pub async fn unblock(&self, identity: &DeviceIdentity) -> Result<()> {
+    pub async fn unblock(&self, identity: &DeviceIdentity) -> Result<UnblockOutcome> {
+        let mut logs = Vec::new();
+        logs.push(format!("Quitando {} de la lista de expulsión", identity.ip));
         self.firewall.unblock(&identity.ip.to_string()).await?;
+        logs.push("Regla de bloqueo retirada".to_string());
         let mut guard = self.targets.lock().await;
         guard.remove(&identity.ip.to_string());
 
@@ -95,10 +124,13 @@ impl ArpSpoofer {
             let mut state_guard = self.ip_forward_state.lock().await;
             if let Some(previous) = state_guard.take() {
                 ip_forwarding::restore(Some(previous)).await?;
+                logs.push("Estado de reenvio IP restaurado".to_string());
+            } else {
+                logs.push("No hubo cambios en reenvio IP".to_string());
             }
         }
 
-        Ok(())
+        Ok(UnblockOutcome { logs })
     }
 
     /// Recupera un resumen de los objetivos bloqueados.
@@ -184,13 +216,17 @@ mod tests {
         let identity = DeviceIdentity::from_strings("192.168.0.9", Some("AA:BB:CC:DD:EE:FF"))
             .expect("identidad válida");
 
-        spoofer.block(&identity).await.expect("bloqueo exitoso");
+        let outcome = spoofer.block(&identity).await.expect("bloqueo exitoso");
 
         let targets = spoofer.get_targets().await;
         assert!(targets.contains_key("192.168.0.9"));
         assert!(firewall.is_blocked("192.168.0.9"));
         assert_eq!(firewall.ensure_calls(), 1);
         assert_eq!(firewall.block_calls(), 1);
+        assert!(outcome
+            .logs
+            .iter()
+            .any(|msg| msg.contains("Regla de bloqueo aplicada")));
     }
 
     #[tokio::test]
@@ -201,10 +237,14 @@ mod tests {
         let spoofer = ArpSpoofer::with_firewall(settings, firewall.clone()).unwrap();
         let identity = DeviceIdentity::from_strings("192.168.0.10", None).unwrap();
 
-        spoofer.block(&identity).await.unwrap();
+        let outcome = spoofer.block(&identity).await.unwrap();
 
         assert_eq!(firewall.block_calls(), 0);
         assert!(spoofer.get_targets().await.contains_key("192.168.0.10"));
+        assert!(outcome
+            .logs
+            .iter()
+            .any(|msg| msg.contains("block_mode desactivado")));
     }
 
     #[tokio::test]
@@ -214,10 +254,14 @@ mod tests {
         let identity = DeviceIdentity::from_strings("192.168.0.11", None).unwrap();
 
         spoofer.block(&identity).await.unwrap();
-        spoofer.unblock(&identity).await.unwrap();
+        let report = spoofer.unblock(&identity).await.unwrap();
 
         assert_eq!(firewall.unblock_calls(), 1);
         assert!(!firewall.is_blocked("192.168.0.11"));
         assert!(spoofer.get_targets().await.is_empty());
+        assert!(report
+            .logs
+            .iter()
+            .any(|msg| msg.contains("Regla de bloqueo retirada")));
     }
 }
