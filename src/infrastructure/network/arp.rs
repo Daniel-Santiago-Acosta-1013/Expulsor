@@ -646,6 +646,29 @@ impl ArpSpoofer {
         Ok(BlockOutcome { logs, verified })
     }
 
+    /// Reintenta la verificación de un dispositivo previamente bloqueado.
+    pub async fn reverify(&self, identity: &DeviceIdentity) -> Result<(bool, Vec<String>)> {
+        let ipv4 = match identity.ip {
+            IpAddr::V4(ip) => ip,
+            IpAddr::V6(_) => {
+                return Err(anyhow!(
+                    "La verificación solo está disponible para dispositivos IPv4"
+                ))
+            }
+        };
+
+        let targets = self.targets.lock().await;
+        if !targets.contains_key(&identity.ip.to_string()) {
+            return Err(anyhow!(
+                "No existe una sesión de bloqueo activa para {}",
+                identity.ip
+            ));
+        }
+        drop(targets);
+
+        verify_blocking(ipv4).await
+    }
+
     /// Detiene el bloqueo actual del dispositivo indicado.
     pub async fn unblock(&self, identity: &DeviceIdentity) -> Result<UnblockOutcome> {
         let mut logs = Vec::new();

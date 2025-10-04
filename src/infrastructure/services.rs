@@ -2,6 +2,7 @@
 
 use crate::app::state::AppState;
 use crate::domain::actions::AppAction;
+use crate::domain::device::DeviceIdentity;
 use crate::domain::logs::{LogEntry, LogLevel};
 use crate::domain::settings::{ScanKind, Settings};
 use crate::infrastructure::network::arp::ArpSpoofer;
@@ -10,9 +11,11 @@ use crate::infrastructure::network::scanner::NetworkScanner;
 use crate::infrastructure::persistence::device_db::DeviceDatabase;
 use crate::utils::shutdown::ShutdownSignal;
 use anyhow::Result;
+use std::collections::HashSet;
 use std::sync::Arc;
 use tokio::sync::{mpsc::Receiver, Mutex};
 use tokio::task::JoinHandle;
+use tokio::time::{sleep, Duration};
 use tracing::{error, info};
 
 /// Contenedor principal de servicios como el escáner, fingerprinter y spoofer.
@@ -20,6 +23,7 @@ pub struct ServiceRegistry {
     _db: Arc<DeviceDatabase>,
     scanner: NetworkScanner,
     spoofer: ArpSpoofer,
+    pending_verifications: Arc<Mutex<HashSet<String>>>,
 }
 
 impl ServiceRegistry {
@@ -34,6 +38,7 @@ impl ServiceRegistry {
             _db,
             scanner,
             spoofer,
+            pending_verifications: Arc::new(Mutex::new(HashSet::new())),
         })
     }
 
@@ -75,7 +80,8 @@ impl ServiceRegistry {
                         guard.push_log(LogEntry::new(LogLevel::Info, format!("{}", message)));
                     }
                     guard.set_block_state(&identity, true, Some(report.verified));
-                    if !report.verified {
+                    let needs_retry = !report.verified;
+                    if needs_retry {
                         guard.push_log(LogEntry::new(
                             LogLevel::Warn,
                             format!("No se pudo confirmar la restricción para {}", identity.ip),
@@ -85,6 +91,11 @@ impl ServiceRegistry {
                         LogLevel::Warn,
                         format!("Acceso restringido para {}", identity.ip),
                     ));
+                    drop(guard);
+                    if needs_retry {
+                        self.ensure_verification_retry(identity.clone(), state.clone())
+                            .await;
+                    }
                 }
                 Err(err) => {
                     error!(?err, %identity.ip, "No se pudo bloquear dispositivo");
@@ -106,6 +117,9 @@ impl ServiceRegistry {
                         LogLevel::Info,
                         format!("Acceso restaurado para {}", identity.ip),
                     ));
+                    drop(guard);
+                    let mut pending = self.pending_verifications.lock().await;
+                    pending.remove(&identity.ip.to_string());
                 }
                 Err(err) => {
                     error!(?err, %identity.ip, "No se pudo desbloquear dispositivo");
@@ -178,5 +192,94 @@ impl ServiceRegistry {
         _shutdown: ShutdownSignal,
     ) -> Result<Vec<JoinHandle<()>>> {
         Ok(Vec::new())
+    }
+
+    async fn ensure_verification_retry(
+        &self,
+        identity: DeviceIdentity,
+        state: Arc<Mutex<AppState>>,
+    ) {
+        let ip = identity.ip.to_string();
+        {
+            let mut guard = self.pending_verifications.lock().await;
+            if guard.contains(&ip) {
+                return;
+            }
+            guard.insert(ip.clone());
+        }
+
+        let spoofer = self.spoofer.clone();
+        let pending = self.pending_verifications.clone();
+
+        tokio::spawn(async move {
+            loop {
+                sleep(Duration::from_secs(5)).await;
+
+                let still_blocked = {
+                    let state_guard = state.lock().await;
+                    state_guard
+                        .devices
+                        .iter()
+                        .any(|device| device.identity.ip == identity.ip && device.blocked)
+                };
+
+                if !still_blocked {
+                    let mut guard = pending.lock().await;
+                    guard.remove(&ip);
+                    break;
+                }
+
+                match spoofer.reverify(&identity).await {
+                    Ok((success, mut logs)) => {
+                        let mut state_guard = state.lock().await;
+                        state_guard.push_log(LogEntry::new(
+                            LogLevel::Info,
+                            format!("Reintentando verificación para {}", identity.ip),
+                        ));
+                        for message in logs.drain(..) {
+                            state_guard.push_log(LogEntry::new(LogLevel::Info, message));
+                        }
+                        state_guard.set_block_state(&identity, true, Some(success));
+                        if success {
+                            state_guard.push_log(LogEntry::new(
+                                LogLevel::Info,
+                                format!("Restricción confirmada para {}", identity.ip),
+                            ));
+                        } else {
+                            state_guard.push_log(LogEntry::new(
+                                LogLevel::Warn,
+                                format!(
+                                    "El dispositivo {} sigue respondiendo; se volverá a intentar",
+                                    identity.ip
+                                ),
+                            ));
+                        }
+                        let should_break = success;
+                        drop(state_guard);
+                        if should_break {
+                            let mut guard = pending.lock().await;
+                            guard.remove(&ip);
+                            break;
+                        }
+                    }
+                    Err(err) => {
+                        let mut state_guard = state.lock().await;
+                        state_guard.push_log(LogEntry::new(
+                            LogLevel::Error,
+                            format!(
+                                "No se pudo reintentar la verificación de {}: {}",
+                                identity.ip, err
+                            ),
+                        ));
+                        state_guard.set_block_state(&identity, true, Some(false));
+                        drop(state_guard);
+
+                        let mut guard = pending.lock().await;
+                        guard.remove(&ip);
+                        break;
+                    }
+                }
+            }
+        });
     }
 }

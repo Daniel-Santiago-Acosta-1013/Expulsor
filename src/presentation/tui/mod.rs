@@ -27,6 +27,7 @@ use ratatui::text::{Line, Span, Text};
 use ratatui::widgets::{Block, Borders, Clear, Paragraph, Row, Table, TableState, Wrap};
 use ratatui::Terminal;
 use std::cmp::{max, min};
+use std::collections::HashMap;
 use std::io;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -40,7 +41,8 @@ pub struct Tui {
     shutdown: ShutdownSignal,
     ui: UiState,
     theme: Theme,
-    spinner: Spinner,
+    scan_spinner: Spinner,
+    loader_spinner: Spinner,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -54,6 +56,7 @@ struct UiState {
     selected_index: usize,
     focus: FocusPane,
     log_scroll: u16,
+    pending_blocks: HashMap<String, Instant>,
 }
 
 impl UiState {
@@ -62,7 +65,41 @@ impl UiState {
             selected_index: 0,
             focus: FocusPane::Devices,
             log_scroll: 0,
+            pending_blocks: HashMap::new(),
         }
+    }
+
+    fn register_pending_block(&mut self, ip: &str) {
+        self.pending_blocks.insert(ip.to_string(), Instant::now());
+    }
+
+    fn clear_pending_block(&mut self, ip: &str) {
+        self.pending_blocks.remove(ip);
+    }
+
+    fn cleanup_pending_blocks(&mut self, snapshot: &AppState) {
+        self.pending_blocks.retain(|ip, started| {
+            if let Some(device) = snapshot
+                .devices
+                .iter()
+                .find(|d| d.identity.ip.to_string() == *ip)
+            {
+                if matches!(device.status, DeviceStatus::Error) {
+                    return false;
+                }
+                if device.blocked && matches!(device.block_verified, Some(true)) {
+                    return false;
+                }
+                if !device.blocked {
+                    // Permite un margen para que la verificación inicial actualice el estado.
+                    return started.elapsed() < Duration::from_secs(10);
+                }
+                true
+            } else {
+                // Si el dispositivo ya no existe, limpiamos tras un pequeño margen.
+                started.elapsed() < Duration::from_secs(5)
+            }
+        });
     }
 }
 
@@ -120,7 +157,8 @@ impl Tui {
             shutdown,
             ui: UiState::new(),
             theme: Theme::default(),
-            spinner: Spinner::default(),
+            scan_spinner: Spinner::default(),
+            loader_spinner: Spinner::default(),
         })
     }
 
@@ -240,7 +278,7 @@ impl Tui {
         Ok(())
     }
 
-    async fn trigger_block(&self, snapshot: &AppState, block: bool) -> Result<()> {
+    async fn trigger_block(&mut self, snapshot: &AppState, block: bool) -> Result<()> {
         if let Some(device) = self.current_device(snapshot) {
             let action = if block {
                 AppAction::BlockDevice {
@@ -251,6 +289,12 @@ impl Tui {
                     identity: device.identity.clone(),
                 }
             };
+            let ip = device.identity.ip.to_string();
+            if block {
+                self.ui.register_pending_block(&ip);
+            } else {
+                self.ui.clear_pending_block(&ip);
+            }
             self.dispatcher.submit(action).await?;
         }
         Ok(())
@@ -261,15 +305,22 @@ impl Tui {
     }
 
     fn render(&mut self, snapshot: &AppState) -> Result<()> {
+        self.ui.cleanup_pending_blocks(snapshot);
         let ui_snapshot = self.ui.clone();
         let theme = self.theme.clone();
         let mut log_scroll = ui_snapshot.log_scroll;
         let selected_index = ui_snapshot.selected_index;
         let focus = ui_snapshot.focus;
         let spinner_frame = if snapshot.ongoing_scan.is_some() {
-            Some(self.spinner.frame())
+            Some(self.scan_spinner.frame())
         } else {
-            self.spinner.reset();
+            self.scan_spinner.reset();
+            None
+        };
+        let loader_frame = if !ui_snapshot.pending_blocks.is_empty() {
+            Some(self.loader_spinner.frame())
+        } else {
+            self.loader_spinner.reset();
             None
         };
 
@@ -299,6 +350,8 @@ impl Tui {
                 focus,
                 &theme,
                 log_scroll,
+                &ui_snapshot.pending_blocks,
+                loader_frame,
             );
             draw_status_bar(frame, status_area, snapshot, &theme, spinner_frame);
         })?;
@@ -323,6 +376,8 @@ fn draw_devices(
     selected_index: usize,
     focus: FocusPane,
     theme: &Theme,
+    pending_blocks: &HashMap<String, Instant>,
+    loader_frame: Option<&str>,
 ) {
     let headers = ["IP", "MAC", "Hostname", "Fabricante", "Estado", "Bloqueo"]
         .into_iter()
@@ -335,16 +390,22 @@ fn draw_devices(
             DeviceStatus::Inactive => "Inactivo",
             DeviceStatus::Error => "Error",
         };
-        let blocked = if device.blocked {
+        let ip_str = device.identity.ip.to_string();
+        let is_pending = pending_blocks.contains_key(&ip_str);
+        let blocked_label = if is_pending {
+            loader_frame
+                .map(|frame| format!("{} Bloqueando", frame))
+                .unwrap_or_else(|| "Bloqueando".to_string())
+        } else if device.blocked {
             match device.block_verified {
-                Some(true) => "Restringido",
-                Some(false) => "Sin confirmar",
-                None => "Pendiente",
+                Some(true) => "Restringido".to_string(),
+                Some(false) => "Sin confirmar".to_string(),
+                None => "Pendiente".to_string(),
             }
         } else if matches!(device.status, DeviceStatus::Error) {
-            "Error"
+            "Error".to_string()
         } else {
-            "--"
+            "--".to_string()
         };
         let hostname = device
             .hostname
@@ -363,10 +424,10 @@ fn draw_devices(
             hostname.to_string(),
             vendor.to_string(),
             status.to_string(),
-            blocked.to_string(),
+            blocked_label.clone(),
         ]);
 
-        if device.blocked {
+        if device.blocked || is_pending {
             row = row.style(theme.blocked_row);
         } else if matches!(device.status, DeviceStatus::Error) {
             row = row.style(theme.error_row);
@@ -414,6 +475,8 @@ fn draw_main_content(
     focus: FocusPane,
     theme: &Theme,
     mut log_scroll: u16,
+    pending_blocks: &HashMap<String, Instant>,
+    loader_frame: Option<&str>,
 ) -> u16 {
     let vertical = Layout::default()
         .direction(Direction::Vertical)
@@ -428,9 +491,26 @@ fn draw_main_content(
         .constraints([Constraint::Percentage(60), Constraint::Percentage(40)])
         .split(upper);
 
-    draw_devices(frame, columns[0], snapshot, selected_index, focus, theme);
+    draw_devices(
+        frame,
+        columns[0],
+        snapshot,
+        selected_index,
+        focus,
+        theme,
+        pending_blocks,
+        loader_frame,
+    );
 
-    draw_details(frame, columns[1], snapshot, theme, selected_index);
+    draw_details(
+        frame,
+        columns[1],
+        snapshot,
+        theme,
+        selected_index,
+        pending_blocks,
+        loader_frame,
+    );
     draw_logs(frame, logs_area, snapshot, focus, &mut log_scroll, theme);
     log_scroll
 }
@@ -441,6 +521,8 @@ fn draw_details(
     snapshot: &AppState,
     theme: &Theme,
     selected_index: usize,
+    pending_blocks: &HashMap<String, Instant>,
+    loader_frame: Option<&str>,
 ) {
     let block = Block::default()
         .borders(Borders::ALL)
@@ -449,7 +531,7 @@ fn draw_details(
     let text = snapshot
         .devices
         .get(selected_index)
-        .map(build_device_details)
+        .map(|device| build_device_details(device, pending_blocks, loader_frame))
         .unwrap_or_else(|| Text::raw("No hay dispositivos detectados aun."));
 
     let paragraph = Paragraph::new(text).block(block).wrap(Wrap { trim: true });
@@ -663,7 +745,11 @@ fn draw_stat_card(
     );
 }
 
-fn build_device_details(device: &DeviceRecord) -> Text<'static> {
+fn build_device_details(
+    device: &DeviceRecord,
+    pending_blocks: &HashMap<String, Instant>,
+    loader_frame: Option<&str>,
+) -> Text<'static> {
     let mut lines = Vec::new();
     lines.push(Line::from(vec![
         Span::styled("[IP] ", Style::default().add_modifier(Modifier::BOLD)),
@@ -689,21 +775,32 @@ fn build_device_details(device: &DeviceRecord) -> Text<'static> {
         }
     }
 
-    let block_label = if device.blocked {
+    let ip_str = device.identity.ip.to_string();
+    let pending = pending_blocks.contains_key(&ip_str);
+    let block_label = if pending {
+        loader_frame
+            .map(|frame| format!("{} Bloqueando", frame))
+            .unwrap_or_else(|| "Bloqueando".to_string())
+    } else if device.blocked {
         match device.block_verified {
-            Some(true) => "Restringido",
-            Some(false) => "Sin confirmar",
-            None => "Pendiente",
+            Some(true) => "Restringido".to_string(),
+            Some(false) => "Sin confirmar".to_string(),
+            None => "Pendiente".to_string(),
         }
     } else {
-        "Permitido"
+        "Permitido".to_string()
     };
     lines.push(Line::from(vec![
         Span::styled("[BLOQUEO] ", Style::default().add_modifier(Modifier::BOLD)),
-        Span::raw(block_label.to_string()),
+        Span::raw(block_label.clone()),
     ]));
 
-    if matches!(device.block_verified, Some(false)) {
+    if pending {
+        lines.push(Line::from(vec![
+            Span::styled("[AVISO] ", Style::default().add_modifier(Modifier::BOLD)),
+            Span::raw("Reintentando verificación de bloqueo"),
+        ]));
+    } else if matches!(device.block_verified, Some(false)) {
         lines.push(Line::from(vec![
             Span::styled("[AVISO] ", Style::default().add_modifier(Modifier::BOLD)),
             Span::raw("Última verificación del bloqueo falló"),
