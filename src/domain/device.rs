@@ -80,6 +80,7 @@ pub struct DeviceRecord {
     pub status: DeviceStatus,
     pub blocked: bool,
     pub detailed_scan_time: Option<DateTime<Utc>>,
+    pub status_reason: Option<String>,
 }
 
 impl DeviceRecord {
@@ -100,6 +101,7 @@ impl DeviceRecord {
             status: DeviceStatus::Active,
             blocked: false,
             detailed_scan_time: None,
+            status_reason: None,
         }
     }
 

@@ -1,6 +1,6 @@
 //! Representa el estado compartido de la aplicación accesible desde la TUI y los servicios.
 
-use crate::domain::device::{DeviceIdentity, DeviceRecord};
+use crate::domain::device::{DeviceIdentity, DeviceRecord, DeviceStatus};
 use crate::domain::logs::LogEntry;
 use crate::domain::settings::{ScanKind, Settings};
 use anyhow::Result;
@@ -75,6 +75,25 @@ impl AppState {
             .find(|entry| entry.identity.ip == identity.ip)
         {
             device.blocked = blocked;
+            if blocked {
+                device.status = DeviceStatus::Active;
+                device.status_reason = None;
+            } else if device.status == DeviceStatus::Error {
+                device.status_reason = None;
+            }
+        }
+    }
+
+    /// Marca un dispositivo con estado de error y un motivo descriptivo.
+    pub fn mark_device_error(&mut self, identity: &DeviceIdentity, reason: String) {
+        if let Some(device) = self
+            .devices
+            .iter_mut()
+            .find(|entry| entry.identity.ip == identity.ip)
+        {
+            device.status = DeviceStatus::Error;
+            device.status_reason = Some(reason);
+            device.blocked = false;
         }
     }
 

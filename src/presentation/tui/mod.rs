@@ -335,7 +335,13 @@ fn draw_devices(
             DeviceStatus::Inactive => "Inactivo",
             DeviceStatus::Error => "Error",
         };
-        let blocked = if device.blocked { "Restringido" } else { "--" };
+        let blocked = if device.blocked {
+            "Restringido"
+        } else if matches!(device.status, DeviceStatus::Error) {
+            "Error"
+        } else {
+            "--"
+        };
         let hostname = device
             .hostname
             .as_deref()
@@ -715,6 +721,17 @@ fn build_device_details(device: &DeviceRecord) -> Text<'static> {
             Style::default().add_modifier(Modifier::BOLD),
         )));
         lines.push(Line::from(Span::raw(http.clone())));
+    }
+
+    if let Some(reason) = &device.status_reason {
+        lines.push(Line::from(""));
+        lines.push(Line::from(vec![
+            Span::styled(
+                "[STATUS] ",
+                Style::default().add_modifier(Modifier::BOLD),
+            ),
+            Span::raw(reason.clone()),
+        ]));
     }
 
     Text::from(lines)

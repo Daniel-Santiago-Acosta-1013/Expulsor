@@ -83,10 +83,10 @@ impl ServiceRegistry {
                 Err(err) => {
                     error!(?err, %identity.ip, "No se pudo bloquear dispositivo");
                     let mut guard = state.lock().await;
-                    guard.push_log(LogEntry::new(
-                        LogLevel::Error,
-                        format!("Fallo al restringir {}: {}", identity.ip, err),
-                    ));
+                    let message = format!("Fallo al restringir {}: {}", identity.ip, err);
+                    guard.push_log(LogEntry::new(LogLevel::Error, message.clone()));
+                    let reason = message.lines().next().unwrap_or_default().to_string();
+                    guard.mark_device_error(&identity, reason);
                 }
             },
             AppAction::UnblockDevice { identity } => match self.spoofer.unblock(&identity).await {
