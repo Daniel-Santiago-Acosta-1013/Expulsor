@@ -153,6 +153,8 @@ async fn ensure_ready_macos() -> Result<()> {
     // Activar pf si está deshabilitado.
     let status = Command::new("pfctl")
         .args(["-s", "info"])
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
         .status()
         .await
         .context("No se pudo consultar el estado de pfctl")?;
@@ -162,6 +164,7 @@ async fn ensure_ready_macos() -> Result<()> {
 
     let enabled = Command::new("pfctl")
         .args(["-s", "info"])
+        .stderr(Stdio::null())
         .output()
         .await
         .context("No se pudo obtener información de pfctl")?;
@@ -169,6 +172,8 @@ async fn ensure_ready_macos() -> Result<()> {
     if !info.contains("Status: Enabled") {
         Command::new("pfctl")
             .arg("-E")
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
             .status()
             .await
             .context("No se pudo habilitar pf")?;
@@ -213,7 +218,13 @@ async fn add_rule_macos(ip: &str) -> Result<()> {
     }
 
     // Limpia estados existentes para la IP restringida.
-    Command::new("pfctl").args(["-k", ip]).output().await.ok();
+    Command::new("pfctl")
+        .args(["-k", ip])
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .await
+        .ok();
     Ok(())
 }
 
