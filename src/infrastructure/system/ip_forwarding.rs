@@ -1,12 +1,16 @@
 //! Habilita o deshabilita el reenvío de paquetes IP cuando es necesario.
 
-use anyhow::{Context, Result};
-#[cfg(target_os = "macos")]
+#[cfg(not(test))]
+use anyhow::Context;
+use anyhow::Result;
+#[cfg(all(not(test), target_os = "macos"))]
 use std::process::Stdio;
+#[cfg(not(test))]
 use tokio::process::Command;
-#[cfg(target_os = "linux")]
+#[cfg(all(not(test), target_os = "linux"))]
 use tokio::task;
 
+#[cfg(not(test))]
 /// Activa el reenvío IP en la plataforma actual devolviendo el estado anterior.
 pub async fn enable() -> Result<Option<String>> {
     #[cfg(target_os = "linux")]
@@ -48,6 +52,7 @@ pub async fn enable() -> Result<Option<String>> {
     }
 }
 
+#[cfg(not(test))]
 /// Restaura el estado de reenvío IP previo.
 pub async fn restore(previous: Option<String>) -> Result<()> {
     #[cfg(target_os = "linux")]
@@ -96,5 +101,32 @@ async fn read_linux_forward() -> Result<String> {
 async fn write_linux_forward(value: &str) -> Result<()> {
     task::spawn_blocking(move || std::fs::write("/proc/sys/net/ipv4/ip_forward", value.as_bytes()))
         .await??;
+    Ok(())
+}
+
+#[cfg(test)]
+use once_cell::sync::Lazy;
+#[cfg(test)]
+use std::sync::Mutex;
+
+#[cfg(test)]
+static FORWARDING_STATE: Lazy<Mutex<bool>> = Lazy::new(|| Mutex::new(false));
+
+#[cfg(test)]
+pub async fn enable() -> Result<Option<String>> {
+    let mut guard = FORWARDING_STATE.lock().unwrap();
+    let previous = if *guard {
+        Some("1".to_string())
+    } else {
+        Some("0".to_string())
+    };
+    *guard = true;
+    Ok(previous)
+}
+
+#[cfg(test)]
+pub async fn restore(previous: Option<String>) -> Result<()> {
+    let mut guard = FORWARDING_STATE.lock().unwrap();
+    *guard = previous.as_deref() == Some("1");
     Ok(())
 }

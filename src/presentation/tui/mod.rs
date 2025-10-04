@@ -66,7 +66,7 @@ impl UiState {
     }
 }
 
-const SPINNER_FRAMES: &[&str] = &["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+const SPINNER_FRAMES: &[&str] = &["|", "/", "-", "\\"];
 
 struct Spinner {
     index: usize,
@@ -279,26 +279,26 @@ impl Tui {
 
             let vertical = Layout::default()
                 .direction(Direction::Vertical)
-                .constraints([Constraint::Min(0), Constraint::Length(2)])
+                .constraints([
+                    Constraint::Length(5),
+                    Constraint::Min(0),
+                    Constraint::Length(2),
+                ])
                 .split(size);
 
-            let body = vertical[0];
-            let status_area = vertical[1];
+            let header_area = vertical[0];
+            let body = vertical[1];
+            let status_area = vertical[2];
 
-            let columns = Layout::default()
-                .direction(Direction::Horizontal)
-                .constraints([Constraint::Percentage(55), Constraint::Percentage(45)])
-                .split(body);
-
-            draw_devices(frame, columns[0], snapshot, selected_index, focus, &theme);
-            log_scroll = draw_right_panel(
+            draw_header(frame, header_area, snapshot, &theme, spinner_frame);
+            log_scroll = draw_main_content(
                 frame,
-                columns[1],
+                body,
                 snapshot,
-                focus,
-                log_scroll,
-                &theme,
                 selected_index,
+                focus,
+                &theme,
+                log_scroll,
             );
             draw_status_bar(frame, status_area, snapshot, &theme, spinner_frame);
         })?;
@@ -391,27 +391,43 @@ fn draw_devices(
                 .title(Span::styled("Dispositivos", title_style)),
         )
         .highlight_style(theme.selection)
-        .highlight_symbol("▶ ");
+        .highlight_symbol(">> ");
 
     frame.render_stateful_widget(table, area, &mut table_state);
 }
 
-fn draw_right_panel(
+fn draw_main_content(
     frame: &mut ratatui::terminal::Frame<'_>,
     area: Rect,
     snapshot: &AppState,
-    focus: FocusPane,
-    mut log_scroll: u16,
-    theme: &Theme,
     selected_index: usize,
+    focus: FocusPane,
+    theme: &Theme,
+    mut log_scroll: u16,
 ) -> u16 {
     let vertical = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Percentage(60), Constraint::Percentage(40)])
+        .constraints([Constraint::Percentage(70), Constraint::Percentage(30)])
         .split(area);
 
-    draw_details(frame, vertical[0], snapshot, theme, selected_index);
-    draw_logs(frame, vertical[1], snapshot, focus, &mut log_scroll, theme);
+    let upper = vertical[0];
+    let logs_area = vertical[1];
+
+    let columns = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Percentage(60), Constraint::Percentage(40)])
+        .split(upper);
+
+    draw_devices(frame, columns[0], snapshot, selected_index, focus, theme);
+
+    let info_layout = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Length(7), Constraint::Min(0)])
+        .split(columns[1]);
+
+    draw_summary(frame, info_layout[0], snapshot, theme);
+    draw_details(frame, info_layout[1], snapshot, theme, selected_index);
+    draw_logs(frame, logs_area, snapshot, focus, &mut log_scroll, theme);
     log_scroll
 }
 
@@ -430,10 +446,74 @@ fn draw_details(
         .devices
         .get(selected_index)
         .map(build_device_details)
-        .unwrap_or_else(|| Text::raw("No hay dispositivos detectados aún."));
+        .unwrap_or_else(|| Text::raw("No hay dispositivos detectados aun."));
 
     let paragraph = Paragraph::new(text).block(block).wrap(Wrap { trim: true });
     frame.render_widget(paragraph, area);
+}
+
+fn draw_summary(
+    frame: &mut ratatui::terminal::Frame<'_>,
+    area: Rect,
+    snapshot: &AppState,
+    theme: &Theme,
+) {
+    let total = snapshot.devices.len();
+    let blocked = snapshot
+        .devices
+        .iter()
+        .filter(|device| device.blocked)
+        .count();
+    let active = snapshot
+        .devices
+        .iter()
+        .filter(|device| !device.blocked && matches!(device.status, DeviceStatus::Active))
+        .count();
+    let mode_line = if let Some(status) = &snapshot.ongoing_scan {
+        let label = match status.mode {
+            ScanKind::Quick => "Escaneo rapido en curso",
+            ScanKind::Deep => "Escaneo profundo en curso",
+        };
+        Span::styled(format!("[SCAN] {}", label), theme.emphasis)
+    } else {
+        Span::styled("[PAUSE] Escaner inactivo", theme.dimmed)
+    };
+
+    let last_refresh = snapshot
+        .last_refresh
+        .map(|ts| ts.format("%d/%m %H:%M:%S").to_string())
+        .unwrap_or_else(|| "Nunca".to_string());
+
+    let mut warnings = Vec::new();
+    if blocked > 0 {
+        warnings.push(Span::styled(
+            format!("[LOCK] Restringidos: {}", blocked),
+            theme.warning,
+        ));
+    }
+
+    let lines = vec![
+        Line::from(vec![Span::styled("[INFO] Resumen", theme.emphasis)]),
+        Line::from(vec![
+            Span::styled("[DEV] Dispositivos: ", theme.dimmed),
+            Span::styled(format!("{}", total), theme.normal),
+            Span::raw("  "),
+            Span::styled("[ON] Activos: ", theme.dimmed),
+            Span::styled(format!("{}", active), theme.normal),
+        ]),
+        Line::from(vec![
+            Span::styled("[TIME] Ultimo escaneo: ", theme.dimmed),
+            Span::styled(last_refresh, theme.normal),
+        ]),
+        Line::from(vec![mode_line]),
+        Line::from(warnings),
+    ];
+
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .title(Span::styled("Estado", theme.normal));
+
+    frame.render_widget(Paragraph::new(lines).block(block), area);
 }
 
 fn draw_logs(
@@ -502,7 +582,7 @@ fn draw_status_bar(
     let hints = vec![
         Span::styled("[Q] Salir", theme.dimmed),
         Span::raw("  "),
-        Span::styled("[R] Escaneo rápido", theme.dimmed),
+        Span::styled("[R] Escaneo rapido", theme.dimmed),
         Span::raw("  "),
         Span::styled("[Ctrl/Cmd+R] Escaneo profundo", theme.dimmed),
         Span::raw("  "),
@@ -526,7 +606,7 @@ fn draw_status_bar(
     frame.render_widget(help, layout[0]);
 
     let subtitle_line = if let Some(status) = &snapshot.ongoing_scan {
-        let spinner = spinner_frame.unwrap_or("⠋");
+        let spinner = spinner_frame.unwrap_or("|");
         let elapsed = Utc::now()
             .signed_duration_since(status.started_at)
             .num_seconds()
@@ -534,11 +614,11 @@ fn draw_status_bar(
         let minutes = elapsed / 60;
         let seconds = elapsed % 60;
         let mode = match status.mode {
-            ScanKind::Quick => "rápido",
+            ScanKind::Quick => "rapido",
             ScanKind::Deep => "profundo",
         };
         let text = format!(
-            "{} Escaneo {}… {:02}:{:02}",
+            "{} Escaneo {}... {:02}:{:02}",
             spinner, mode, minutes, seconds
         );
         Line::from(Span::styled(text, theme.emphasis))
@@ -554,48 +634,117 @@ fn draw_status_bar(
     frame.render_widget(subtitle, layout[1]);
 }
 
+fn draw_header(
+    frame: &mut ratatui::terminal::Frame<'_>,
+    area: Rect,
+    snapshot: &AppState,
+    theme: &Theme,
+    spinner_frame: Option<&'static str>,
+) {
+    let total = snapshot.devices.len();
+    let active = snapshot
+        .devices
+        .iter()
+        .filter(|device| !device.blocked && matches!(device.status, DeviceStatus::Active))
+        .count();
+    let blocked = snapshot.devices.iter().filter(|d| d.blocked).count();
+
+    let spinner = spinner_frame.unwrap_or("-");
+    let scan_text = if let Some(status) = &snapshot.ongoing_scan {
+        let mode = match status.mode {
+            ScanKind::Quick => "Rapido",
+            ScanKind::Deep => "Profundo",
+        };
+        format!("{} Escaneo {} en curso", spinner, mode)
+    } else {
+        "[PAUSE] Escaner inactivo".to_string()
+    };
+
+    let cards = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([
+            Constraint::Percentage(25),
+            Constraint::Percentage(25),
+            Constraint::Percentage(25),
+            Constraint::Percentage(25),
+        ])
+        .split(area);
+
+    draw_stat_card(
+        frame,
+        cards[0],
+        "[DEV] Monitoreados",
+        total.to_string(),
+        theme,
+    );
+    draw_stat_card(frame, cards[1], "[ON] Activos", active.to_string(), theme);
+    draw_stat_card(
+        frame,
+        cards[2],
+        "[LOCK] Restringidos",
+        blocked.to_string(),
+        theme,
+    );
+    draw_stat_card(frame, cards[3], "[SCAN] Estado", scan_text, theme);
+}
+
+fn draw_stat_card(
+    frame: &mut ratatui::terminal::Frame<'_>,
+    area: Rect,
+    title: &str,
+    value: String,
+    theme: &Theme,
+) {
+    let lines = vec![
+        Line::from(Span::styled(title, theme.dimmed)),
+        Line::from(Span::styled(value, theme.emphasis)),
+    ];
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .border_style(theme.dimmed);
+
+    frame.render_widget(
+        Paragraph::new(lines)
+            .alignment(Alignment::Center)
+            .wrap(Wrap { trim: true })
+            .block(block),
+        area,
+    );
+}
+
 fn build_device_details(device: &DeviceRecord) -> Text<'static> {
     let mut lines = Vec::new();
     lines.push(Line::from(vec![
-        Span::styled(
-            "Dirección IP: ",
-            Style::default().add_modifier(Modifier::BOLD),
-        ),
+        Span::styled("[IP] ", Style::default().add_modifier(Modifier::BOLD)),
         Span::raw(device.identity.ip.to_string()),
     ]));
     if let Some(mac) = &device.identity.mac {
         lines.push(Line::from(vec![
-            Span::styled("MAC: ", Style::default().add_modifier(Modifier::BOLD)),
+            Span::styled("[MAC] ", Style::default().add_modifier(Modifier::BOLD)),
             Span::raw(mac.clone()),
         ]));
     }
     if let Some(hostname) = &device.hostname {
         lines.push(Line::from(vec![
-            Span::styled("Hostname: ", Style::default().add_modifier(Modifier::BOLD)),
+            Span::styled("[HOST] ", Style::default().add_modifier(Modifier::BOLD)),
             Span::raw(hostname.clone()),
         ]));
     }
     if let Some(vendor) = &device.vendor {
         lines.push(Line::from(vec![
-            Span::styled(
-                "Fabricante: ",
-                Style::default().add_modifier(Modifier::BOLD),
-            ),
+            Span::styled("[VENDOR] ", Style::default().add_modifier(Modifier::BOLD)),
             Span::raw(vendor.clone()),
         ]));
     }
     if let Some(model) = &device.model {
         lines.push(Line::from(vec![
-            Span::styled("Modelo: ", Style::default().add_modifier(Modifier::BOLD)),
+            Span::styled("[MODEL] ", Style::default().add_modifier(Modifier::BOLD)),
             Span::raw(model.clone()),
         ]));
     }
     if let Some(os) = &device.operating_system {
         lines.push(Line::from(vec![
-            Span::styled(
-                "Sistema Operativo: ",
-                Style::default().add_modifier(Modifier::BOLD),
-            ),
+            Span::styled("[OS] ", Style::default().add_modifier(Modifier::BOLD)),
             Span::raw(os.clone()),
         ]));
     }
@@ -604,17 +753,14 @@ fn build_device_details(device: &DeviceRecord) -> Text<'static> {
     if !device.open_ports.is_empty() {
         let ports: Vec<String> = device.open_ports.iter().map(|p| p.to_string()).collect();
         lines.push(Line::from(vec![
-            Span::styled(
-                "Puertos abiertos: ",
-                Style::default().add_modifier(Modifier::BOLD),
-            ),
+            Span::styled("[PORTS] ", Style::default().add_modifier(Modifier::BOLD)),
             Span::raw(ports.join(", ")),
         ]));
     }
 
     if !device.service_details.is_empty() {
         lines.push(Line::from(Span::styled(
-            "Servicios detectados:",
+            "[SERVICES]",
             Style::default().add_modifier(Modifier::BOLD),
         )));
         for (port, detail) in &device.service_details {
@@ -627,7 +773,7 @@ fn build_device_details(device: &DeviceRecord) -> Text<'static> {
             .trim()
             .to_string();
             lines.push(Line::from(Span::raw(format!(
-                "  • {} -> {}",
+                "  - {} -> {}",
                 port, descriptor
             ))));
         }
@@ -635,7 +781,7 @@ fn build_device_details(device: &DeviceRecord) -> Text<'static> {
 
     if let Some(http) = &device.http_signature {
         lines.push(Line::from(Span::styled(
-            "HTTP:",
+            "[HTTP]",
             Style::default().add_modifier(Modifier::BOLD),
         )));
         lines.push(Line::from(Span::raw(http.clone())));
