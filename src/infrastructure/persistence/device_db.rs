@@ -90,6 +90,8 @@ impl DeviceDatabase {
         let service_details = serde_json::to_string(&record.service_details)?;
         let identity = &record.identity;
 
+        let blocked_flag = matches!(record.block_verified, Some(true));
+
         conn.execute(
             r#"
             INSERT INTO identified_devices (
@@ -124,7 +126,7 @@ impl DeviceDatabase {
                 ":open_ports": open_ports,
                 ":service_details": service_details,
                 ":last_seen": record.last_seen.timestamp(),
-                ":blocked": if record.blocked { 1 } else { 0 },
+                ":blocked": if blocked_flag { 1 } else { 0 },
             },
         )?;
 
@@ -192,6 +194,9 @@ impl DeviceDatabase {
                 record.service_details = service_map;
                 record.last_seen = last_seen_time;
                 record.blocked = blocked != 0;
+                if record.blocked {
+                    record.block_verified = Some(true);
+                }
 
                 Ok(record)
             })

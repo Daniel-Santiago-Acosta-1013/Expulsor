@@ -79,6 +79,8 @@ pub struct DeviceRecord {
     pub last_seen: DateTime<Utc>,
     pub status: DeviceStatus,
     pub blocked: bool,
+    /// Resultado de la última verificación del bloqueo (`None` cuando no aplica).
+    pub block_verified: Option<bool>,
     pub detailed_scan_time: Option<DateTime<Utc>>,
     pub status_reason: Option<String>,
 }
@@ -100,6 +102,7 @@ impl DeviceRecord {
             last_seen: Utc::now(),
             status: DeviceStatus::Active,
             blocked: false,
+            block_verified: None,
             detailed_scan_time: None,
             status_reason: None,
         }

@@ -74,7 +74,13 @@ impl ServiceRegistry {
                     for message in report.logs {
                         guard.push_log(LogEntry::new(LogLevel::Info, format!("{}", message)));
                     }
-                    guard.set_block_state(&identity, true);
+                    guard.set_block_state(&identity, true, Some(report.verified));
+                    if !report.verified {
+                        guard.push_log(LogEntry::new(
+                            LogLevel::Warn,
+                            format!("No se pudo confirmar la restricción para {}", identity.ip),
+                        ));
+                    }
                     guard.push_log(LogEntry::new(
                         LogLevel::Warn,
                         format!("Acceso restringido para {}", identity.ip),
@@ -95,7 +101,7 @@ impl ServiceRegistry {
                     for message in report.logs {
                         guard.push_log(LogEntry::new(LogLevel::Info, format!("{}", message)));
                     }
-                    guard.set_block_state(&identity, false);
+                    guard.set_block_state(&identity, false, None);
                     guard.push_log(LogEntry::new(
                         LogLevel::Info,
                         format!("Acceso restaurado para {}", identity.ip),

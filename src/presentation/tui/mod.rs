@@ -336,7 +336,11 @@ fn draw_devices(
             DeviceStatus::Error => "Error",
         };
         let blocked = if device.blocked {
-            "Restringido"
+            match device.block_verified {
+                Some(true) => "Restringido",
+                Some(false) => "Sin confirmar",
+                None => "Pendiente",
+            }
         } else if matches!(device.status, DeviceStatus::Error) {
             "Error"
         } else {
@@ -581,9 +585,26 @@ fn draw_header(
     let active = snapshot
         .devices
         .iter()
-        .filter(|device| !device.blocked && matches!(device.status, DeviceStatus::Active))
+        .filter(|device| {
+            matches!(device.status, DeviceStatus::Active)
+                && !matches!(device.block_verified, Some(true))
+        })
         .count();
-    let blocked = snapshot.devices.iter().filter(|d| d.blocked).count();
+    let blocked_verified = snapshot
+        .devices
+        .iter()
+        .filter(|d| matches!(d.block_verified, Some(true)))
+        .count();
+    let blocked_pending = snapshot
+        .devices
+        .iter()
+        .filter(|d| d.blocked && !matches!(d.block_verified, Some(true)))
+        .count();
+    let blocked_value = if blocked_pending > 0 {
+        format!("{} (+{} sin confirmar)", blocked_verified, blocked_pending)
+    } else {
+        blocked_verified.to_string()
+    };
 
     let spinner = spinner_frame.unwrap_or("-");
     let scan_text = if let Some(status) = &snapshot.ongoing_scan {
@@ -614,13 +635,7 @@ fn draw_header(
         theme,
     );
     draw_stat_card(frame, cards[1], "[ON] Activos", active.to_string(), theme);
-    draw_stat_card(
-        frame,
-        cards[2],
-        "[LOCK] Restringidos",
-        blocked.to_string(),
-        theme,
-    );
+    draw_stat_card(frame, cards[2], "[LOCK] Restringidos", blocked_value, theme);
     draw_stat_card(frame, cards[3], "[SCAN] Estado", scan_text, theme);
 }
 
@@ -654,6 +669,47 @@ fn build_device_details(device: &DeviceRecord) -> Text<'static> {
         Span::styled("[IP] ", Style::default().add_modifier(Modifier::BOLD)),
         Span::raw(device.identity.ip.to_string()),
     ]));
+
+    let status_label = match device.status {
+        DeviceStatus::Active => "Activo",
+        DeviceStatus::Inactive => "Inactivo",
+        DeviceStatus::Error => "Error",
+    };
+    lines.push(Line::from(vec![
+        Span::styled("[ESTADO] ", Style::default().add_modifier(Modifier::BOLD)),
+        Span::raw(status_label.to_string()),
+    ]));
+
+    if let Some(reason) = &device.status_reason {
+        if !reason.is_empty() {
+            lines.push(Line::from(vec![
+                Span::styled("[DETALLE] ", Style::default().add_modifier(Modifier::BOLD)),
+                Span::raw(reason.clone()),
+            ]));
+        }
+    }
+
+    let block_label = if device.blocked {
+        match device.block_verified {
+            Some(true) => "Restringido",
+            Some(false) => "Sin confirmar",
+            None => "Pendiente",
+        }
+    } else {
+        "Permitido"
+    };
+    lines.push(Line::from(vec![
+        Span::styled("[BLOQUEO] ", Style::default().add_modifier(Modifier::BOLD)),
+        Span::raw(block_label.to_string()),
+    ]));
+
+    if matches!(device.block_verified, Some(false)) {
+        lines.push(Line::from(vec![
+            Span::styled("[AVISO] ", Style::default().add_modifier(Modifier::BOLD)),
+            Span::raw("Última verificación del bloqueo falló"),
+        ]));
+    }
+
     if let Some(mac) = &device.identity.mac {
         lines.push(Line::from(vec![
             Span::styled("[MAC] ", Style::default().add_modifier(Modifier::BOLD)),
@@ -721,17 +777,6 @@ fn build_device_details(device: &DeviceRecord) -> Text<'static> {
             Style::default().add_modifier(Modifier::BOLD),
         )));
         lines.push(Line::from(Span::raw(http.clone())));
-    }
-
-    if let Some(reason) = &device.status_reason {
-        lines.push(Line::from(""));
-        lines.push(Line::from(vec![
-            Span::styled(
-                "[STATUS] ",
-                Style::default().add_modifier(Modifier::BOLD),
-            ),
-            Span::raw(reason.clone()),
-        ]));
     }
 
     Text::from(lines)

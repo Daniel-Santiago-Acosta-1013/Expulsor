@@ -95,6 +95,7 @@ pub struct ArpSpoofer {
 #[derive(Debug, Default, Clone)]
 pub struct BlockOutcome {
     pub logs: Vec<String>,
+    pub verified: bool,
 }
 
 #[derive(Debug, Default, Clone)]
@@ -605,28 +606,23 @@ impl ArpSpoofer {
         )?;
         logs.push("Sesión de ARP poisoning iniciada".to_string());
 
+        let mut verified = !settings.block_mode;
         if settings.block_mode {
-            let (verified, verification_logs) = verify_blocking(ipv4).await?;
-            logs.extend(verification_logs);
-            if !verified {
-                logs.push("Verificación fallida: se revertirá el bloqueo".to_string());
-                let cleanup_logs = shutdown_control(spoof_control).await?;
-                logs.extend(cleanup_logs);
-                self.firewall.unblock(&identity.ip.to_string()).await?;
-                logs.push("Regla de firewall revertida".to_string());
-
-                if self.sessions.lock().await.is_empty() {
-                    let mut state_guard = self.ip_forward_state.lock().await;
-                    if let Some(previous) = state_guard.take() {
-                        ip_forwarding::restore(Some(previous)).await?;
-                        logs.push("Estado de reenvio IP restaurado".to_string());
+            match verify_blocking(ipv4).await {
+                Ok((success, verification_logs)) => {
+                    logs.extend(verification_logs);
+                    verified = success;
+                    if !success {
+                        logs.push(
+                            "Verificación fallida: el dispositivo respondió al ping. Se mantiene el bloqueo aplicado"
+                                .to_string(),
+                        );
                     }
                 }
-
-                return Err(anyhow!(
-                    "No se pudo confirmar el bloqueo para {}",
-                    identity.ip
-                ));
+                Err(err) => {
+                    logs.push(format!("No se pudo verificar la restricción: {}", err));
+                    verified = false;
+                }
             }
         }
 
@@ -647,7 +643,7 @@ impl ArpSpoofer {
             },
         );
 
-        Ok(BlockOutcome { logs })
+        Ok(BlockOutcome { logs, verified })
     }
 
     /// Detiene el bloqueo actual del dispositivo indicado.
@@ -699,7 +695,11 @@ mod tests {
     use std::collections::HashSet;
     use std::sync::Mutex;
 
-    struct MockNetworkGuard;
+    static TEST_LOCK: Lazy<StdMutex<()>> = Lazy::new(|| StdMutex::new(()));
+
+    struct MockNetworkGuard {
+        _lock: std::sync::MutexGuard<'static, ()>,
+    }
 
     impl Drop for MockNetworkGuard {
         fn drop(&mut self) {
@@ -709,8 +709,9 @@ mod tests {
 
     impl MockNetwork {
         fn install(self) -> MockNetworkGuard {
+            let lock = TEST_LOCK.lock().unwrap();
             *MOCK_NETWORK.lock().unwrap() = Some(self);
-            MockNetworkGuard
+            MockNetworkGuard { _lock: lock }
         }
     }
 
@@ -796,6 +797,7 @@ mod tests {
         assert!(firewall.is_blocked("192.168.0.9"));
         assert_eq!(firewall.ensure_calls(), 1);
         assert_eq!(firewall.block_calls(), 1);
+        assert!(outcome.verified);
         assert!(outcome
             .logs
             .iter()
@@ -829,10 +831,44 @@ mod tests {
 
         assert_eq!(firewall.block_calls(), 0);
         assert!(spoofer.get_targets().await.contains_key("192.168.0.10"));
+        assert!(outcome.verified);
         assert!(outcome
             .logs
             .iter()
             .any(|msg| msg.contains("block_mode desactivado")));
+    }
+
+    #[tokio::test]
+    async fn block_retains_state_when_verification_fails() {
+        let _guard = MockNetwork {
+            context: Arc::new(NetworkContext {
+                interface_name: "test0".to_string(),
+                local_mac: PnetMacAddr::new(0, 1, 2, 3, 4, 5),
+                local_ip: Ipv4Addr::new(192, 168, 0, 254),
+                gateway_ip: Ipv4Addr::new(192, 168, 0, 1),
+                gateway_mac: PnetMacAddr::new(0, 16, 32, 48, 64, 80),
+            }),
+            target_mac: PnetMacAddr::new(222, 173, 190, 239, 202, 221),
+            stop_logs: vec!["restaurado".to_string()],
+            verify_success: false,
+            verify_logs: vec!["mock verify fail".to_string()],
+        }
+        .install();
+
+        let firewall = Arc::new(MockFirewall::default());
+        let spoofer = ArpSpoofer::with_firewall(Settings::default(), firewall.clone()).unwrap();
+        let identity = DeviceIdentity::from_strings("192.168.0.12", None).unwrap();
+
+        let outcome = spoofer.block(&identity).await.expect("bloqueo estable");
+
+        assert!(!outcome.verified);
+        let targets = spoofer.get_targets().await;
+        assert!(targets.contains_key("192.168.0.12"));
+        assert!(firewall.is_blocked("192.168.0.12"));
+        assert!(outcome
+            .logs
+            .iter()
+            .any(|msg| msg.contains("Se mantiene el bloqueo aplicado")));
     }
 
     #[tokio::test]

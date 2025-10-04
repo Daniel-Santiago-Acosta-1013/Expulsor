@@ -67,17 +67,27 @@ impl AppState {
         self.last_refresh = Some(Utc::now());
     }
 
-    /// Marca el estado de bloqueo de un dispositivo existente.
-    pub fn set_block_state(&mut self, identity: &DeviceIdentity, blocked: bool) {
+    /// Marca el estado de bloqueo de un dispositivo existente junto con el resultado de verificación.
+    pub fn set_block_state(
+        &mut self,
+        identity: &DeviceIdentity,
+        blocked: bool,
+        verified: Option<bool>,
+    ) {
         if let Some(device) = self
             .devices
             .iter_mut()
             .find(|entry| entry.identity.ip == identity.ip)
         {
             device.blocked = blocked;
+            device.block_verified = if blocked { verified } else { None };
             if blocked {
                 device.status = DeviceStatus::Active;
-                device.status_reason = None;
+                device.status_reason = if matches!(device.block_verified, Some(false)) {
+                    Some("Verificación del bloqueo fallida".to_string())
+                } else {
+                    None
+                };
             } else if device.status == DeviceStatus::Error {
                 device.status_reason = None;
             }
@@ -94,6 +104,7 @@ impl AppState {
             device.status = DeviceStatus::Error;
             device.status_reason = Some(reason);
             device.blocked = false;
+            device.block_verified = None;
         }
     }
 

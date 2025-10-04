@@ -37,12 +37,8 @@ impl FirewallDriver for SystemFirewall {
 pub async fn add_rule(ip: &str) -> Result<()> {
     #[cfg(target_os = "linux")]
     {
-        if !check_rule_linux(ip).await? {
-            Command::new("iptables")
-                .args(["-A", "FORWARD", "-s", ip, "-j", "DROP"])
-                .status()
-                .await
-                .context("Error al ejecutar iptables -A")?;
+        for direction in ["-s", "-d"] {
+            ensure_rule_linux(direction, ip).await?;
         }
         return Ok(());
     }
@@ -54,20 +50,39 @@ pub async fn add_rule(ip: &str) -> Result<()> {
 
     #[cfg(target_os = "windows")]
     {
+        let suffix = ip.replace('.', "_");
+        let out_rule = format!("name=ExpulsorBlockOut{}", suffix);
+        let in_rule = format!("name=ExpulsorBlockIn{}", suffix);
+
         Command::new("netsh")
             .args([
                 "advfirewall",
                 "firewall",
                 "add",
                 "rule",
-                &format!("name=ExpulsorBlock{}", ip.replace('.', "_")),
+                &out_rule,
                 "dir=out",
                 "action=block",
                 &format!("remoteip={}", ip),
             ])
             .status()
             .await
-            .context("Error al ejecutar netsh")?;
+            .context("Error al ejecutar netsh (salida)")?;
+
+        Command::new("netsh")
+            .args([
+                "advfirewall",
+                "firewall",
+                "add",
+                "rule",
+                &in_rule,
+                "dir=in",
+                "action=block",
+                &format!("remoteip={}", ip),
+            ])
+            .status()
+            .await
+            .context("Error al ejecutar netsh (entrada)")?;
         return Ok(());
     }
 
@@ -82,12 +97,8 @@ pub async fn add_rule(ip: &str) -> Result<()> {
 pub async fn remove_rule(ip: &str) -> Result<()> {
     #[cfg(target_os = "linux")]
     {
-        while check_rule_linux(ip).await? {
-            Command::new("iptables")
-                .args(["-D", "FORWARD", "-s", ip, "-j", "DROP"])
-                .status()
-                .await
-                .context("Error al ejecutar iptables -D")?;
+        for direction in ["-s", "-d"] {
+            remove_rule_linux(direction, ip).await?;
         }
         return Ok(());
     }
@@ -99,17 +110,19 @@ pub async fn remove_rule(ip: &str) -> Result<()> {
 
     #[cfg(target_os = "windows")]
     {
-        Command::new("netsh")
-            .args([
-                "advfirewall",
-                "firewall",
-                "delete",
-                "rule",
-                &format!("name=ExpulsorBlock{}", ip.replace('.', "_")),
-            ])
-            .status()
-            .await
-            .context("Error al ejecutar netsh delete")?;
+        let suffix = ip.replace('.', "_");
+        for rule in [
+            format!("name=ExpulsorBlockOut{}", suffix),
+            format!("name=ExpulsorBlockIn{}", suffix),
+            // Regla heredada versiones anteriores
+            format!("name=ExpulsorBlock{}", suffix),
+        ] {
+            let _status = Command::new("netsh")
+                .args(["advfirewall", "firewall", "delete", "rule", &rule])
+                .status()
+                .await
+                .context("Error al ejecutar netsh delete")?;
+        }
         return Ok(());
     }
 
@@ -121,13 +134,37 @@ pub async fn remove_rule(ip: &str) -> Result<()> {
 }
 
 #[cfg(target_os = "linux")]
-async fn check_rule_linux(ip: &str) -> Result<bool> {
+async fn check_rule_linux(direction_flag: &str, ip: &str) -> Result<bool> {
     let status = Command::new("iptables")
-        .args(["-C", "FORWARD", "-s", ip, "-j", "DROP"])
+        .args(["-C", "FORWARD", direction_flag, ip, "-j", "DROP"])
         .status()
         .await
         .context("Error al comprobar reglas iptables")?;
     Ok(status.success())
+}
+
+#[cfg(target_os = "linux")]
+async fn ensure_rule_linux(direction_flag: &str, ip: &str) -> Result<()> {
+    if !check_rule_linux(direction_flag, ip).await? {
+        Command::new("iptables")
+            .args(["-A", "FORWARD", direction_flag, ip, "-j", "DROP"])
+            .status()
+            .await
+            .context("Error al ejecutar iptables -A")?;
+    }
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+async fn remove_rule_linux(direction_flag: &str, ip: &str) -> Result<()> {
+    while check_rule_linux(direction_flag, ip).await? {
+        Command::new("iptables")
+            .args(["-D", "FORWARD", direction_flag, ip, "-j", "DROP"])
+            .status()
+            .await
+            .context("Error al ejecutar iptables -D")?;
+    }
+    Ok(())
 }
 
 async fn ensure_ready() -> Result<()> {
