@@ -82,8 +82,10 @@ async fn check_datalink_channel(interface_name: &str) -> Result<bool> {
         .ok_or_else(|| anyhow!("No se encontró la interfaz {}", interface_name))?;
 
     let result = tokio::task::spawn_blocking(move || {
-        let mut config = DatalinkConfig::default();
-        config.write_buffer_size = 512;
+        let config = DatalinkConfig {
+            write_buffer_size: 512,
+            ..Default::default()
+        };
         match pnet_datalink::channel(&iface, config) {
             Ok(Ethernet(_tx, _rx)) => Ok(true),
             Ok(_) => Err(anyhow!("Tipo de canal no soportado")),

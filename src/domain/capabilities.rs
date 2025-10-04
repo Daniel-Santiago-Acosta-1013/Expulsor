@@ -4,9 +4,10 @@ use serde::{Deserialize, Serialize};
 use std::net::Ipv4Addr;
 
 /// Estrategias recomendadas para limitar el tráfico de un dispositivo.
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
 pub enum BlockStrategy {
     /// Solo firewall; no se espera que el envenenamiento ARP funcione.
+    #[default]
     FirewallOnly,
     /// Firewall combinado con ARP moderado (intervalos más largos, sin modo agresivo).
     BalancedArp,
@@ -24,12 +25,6 @@ impl BlockStrategy {
             BlockStrategy::AggressiveArp => "ARP agresivo",
             BlockStrategy::Unsupported => "Sin soporte",
         }
-    }
-}
-
-impl Default for BlockStrategy {
-    fn default() -> Self {
-        BlockStrategy::FirewallOnly
     }
 }
 

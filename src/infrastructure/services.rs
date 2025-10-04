@@ -79,7 +79,7 @@ impl ServiceRegistry {
                 Ok(report) => {
                     let mut guard = state.lock().await;
                     for message in report.logs {
-                        guard.push_log(LogEntry::new(LogLevel::Info, format!("{}", message)));
+                        guard.push_log(LogEntry::new(LogLevel::Info, message));
                     }
                     guard.set_block_state(&identity, true, Some(report.verified));
                     let needs_retry = !report.verified;
@@ -112,7 +112,7 @@ impl ServiceRegistry {
                 Ok(report) => {
                     let mut guard = state.lock().await;
                     for message in report.logs {
-                        guard.push_log(LogEntry::new(LogLevel::Info, format!("{}", message)));
+                        guard.push_log(LogEntry::new(LogLevel::Info, message));
                     }
                     guard.set_block_state(&identity, false, None);
                     guard.push_log(LogEntry::new(

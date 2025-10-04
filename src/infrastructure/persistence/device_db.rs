@@ -216,8 +216,8 @@ impl DeviceDatabase {
     fn connect(path: &Path) -> Result<Connection> {
         let conn = Connection::open(path)
             .with_context(|| format!("No se pudo abrir la base de datos {:?}", path))?;
-        conn.pragma_update(None, "journal_mode", &"WAL")?;
-        conn.pragma_update(None, "synchronous", &"NORMAL")?;
+        conn.pragma_update(None, "journal_mode", "WAL")?;
+        conn.pragma_update(None, "synchronous", "NORMAL")?;
         Ok(conn)
     }
 

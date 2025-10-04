@@ -162,13 +162,11 @@ impl Fingerprinter {
 
         for url in candidates {
             let request = self.client.get(&url);
-            if let Ok(response) = timeout(self.http_timeout, request.send()).await {
-                if let Ok(resp) = response {
-                    if let Ok(text) = resp.text().await {
-                        if let Some(capture) = self.http_title_regex.captures(&text) {
-                            if let Some(title) = capture.name("title") {
-                                return Some(format!("{} | {}", url, title.as_str().trim()));
-                            }
+            if let Ok(Ok(resp)) = timeout(self.http_timeout, request.send()).await {
+                if let Ok(text) = resp.text().await {
+                    if let Some(capture) = self.http_title_regex.captures(&text) {
+                        if let Some(title) = capture.name("title") {
+                            return Some(format!("{} | {}", url, title.as_str().trim()));
                         }
                     }
                 }

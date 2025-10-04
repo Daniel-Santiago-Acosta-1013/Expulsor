@@ -96,7 +96,7 @@ impl SignatureMatcher {
         if open_ports.is_empty() {
             return None;
         }
-        let set: Vec<u16> = open_ports.iter().cloned().collect();
+        let set: Vec<u16> = open_ports.to_vec();
         let mut best_label: Option<(String, f32)> = None;
         for signature in &self.ports {
             if signature.ports.is_empty() {

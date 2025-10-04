@@ -19,7 +19,7 @@ pub async fn enable() -> Result<Option<String>> {
         if previous.trim() != "1" {
             write_linux_forward("1").await?;
         }
-        return Ok(Some(previous));
+        Ok(Some(previous))
     }
 
     #[cfg(target_os = "macos")]
@@ -37,13 +37,13 @@ pub async fn enable() -> Result<Option<String>> {
             .status()
             .await
             .context("No se pudo habilitar ip forwarding")?;
-        return Ok(Some(previous));
+        Ok(Some(previous))
     }
 
     #[cfg(target_os = "windows")]
     {
         // Windows gestiona el reenvío desde el registro. No se aplica en esta versión.
-        return Ok(None);
+        Ok(None)
     }
 
     #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
@@ -60,7 +60,7 @@ pub async fn restore(previous: Option<String>) -> Result<()> {
         if let Some(state) = previous {
             write_linux_forward(state.trim()).await?;
         }
-        return Ok(());
+        Ok(())
     }
 
     #[cfg(target_os = "macos")]
@@ -74,13 +74,13 @@ pub async fn restore(previous: Option<String>) -> Result<()> {
                 .await
                 .context("No se pudo restaurar ip forwarding")?;
         }
-        return Ok(());
+        Ok(())
     }
 
     #[cfg(target_os = "windows")]
     {
         let _ = previous;
-        return Ok(());
+        Ok(())
     }
 
     #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]

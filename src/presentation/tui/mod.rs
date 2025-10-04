@@ -374,6 +374,7 @@ impl Drop for Tui {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn draw_devices(
     frame: &mut ratatui::terminal::Frame<'_>,
     area: Rect,
@@ -472,6 +473,7 @@ fn draw_devices(
     frame.render_stateful_widget(table, area, &mut table_state);
 }
 
+#[allow(clippy::too_many_arguments)]
 fn draw_main_content(
     frame: &mut ratatui::terminal::Frame<'_>,
     area: Rect,
@@ -782,9 +784,10 @@ fn build_device_details(
 ) -> Text<'static> {
     let mut lines = Vec::new();
     if let Some(report) = capabilities {
+        let summary = report.summary();
         lines.push(Line::from(vec![
             Span::styled("[NET] ", Style::default().add_modifier(Modifier::BOLD)),
-            Span::raw(format!("{}", report.summary())),
+            Span::raw(summary),
         ]));
         if let Some(gateway) = report.gateway_ip {
             lines.push(Line::from(vec![

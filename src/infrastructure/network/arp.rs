@@ -173,10 +173,12 @@ fn resolve_target_mac(context: &NetworkContext, target_ip: Ipv4Addr) -> Result<P
             )
         })?;
 
-    let mut config = DatalinkConfig::default();
-    config.read_timeout = Some(Duration::from_millis(300));
-    config.write_buffer_size = 2048;
-    config.read_buffer_size = 2048;
+    let config = DatalinkConfig {
+        read_timeout: Some(Duration::from_millis(300)),
+        write_buffer_size: 2048,
+        read_buffer_size: 2048,
+        ..Default::default()
+    };
 
     let (mut tx, mut rx) = match pnet_datalink::channel(&interface, config)? {
         Ethernet(tx, rx) => (tx, rx),
@@ -320,8 +322,10 @@ fn run_poison_loop(
             )
         })?;
 
-    let mut config = DatalinkConfig::default();
-    config.write_buffer_size = 2048;
+    let config = DatalinkConfig {
+        write_buffer_size: 2048,
+        ..Default::default()
+    };
 
     let (mut tx, _rx) = match pnet_datalink::channel(&interface, config)? {
         Ethernet(tx, rx) => (tx, rx),
@@ -379,8 +383,10 @@ fn reinforce_poisoning(
             )
         })?;
 
-    let mut config = DatalinkConfig::default();
-    config.write_buffer_size = 2048;
+    let config = DatalinkConfig {
+        write_buffer_size: 2048,
+        ..Default::default()
+    };
 
     let (mut tx, _rx) = match pnet_datalink::channel(&interface, config)? {
         Ethernet(tx, rx) => (tx, rx),
@@ -469,8 +475,10 @@ fn restore_connection(
             )
         })?;
 
-    let mut config = DatalinkConfig::default();
-    config.write_buffer_size = 2048;
+    let config = DatalinkConfig {
+        write_buffer_size: 2048,
+        ..Default::default()
+    };
 
     let (mut tx, _rx) = match pnet_datalink::channel(&interface, config)? {
         Ethernet(tx, rx) => (tx, rx),
@@ -582,7 +590,7 @@ async fn shutdown_control(control: SpoofControl) -> Result<Vec<String>> {
 impl ArpSpoofer {
     /// Crea un spoofer configurado con la puerta de enlace y la interfaz local.
     pub fn new(settings: Settings) -> Result<Self> {
-        Self::with_firewall(settings, Arc::new(SystemFirewall::default()))
+        Self::with_firewall(settings, Arc::new(SystemFirewall))
     }
 
     /// Permite inyectar un controlador de firewall personalizado (útil en pruebas).
@@ -955,7 +963,9 @@ mod tests {
 
     impl MockNetwork {
         fn install(self) -> MockNetworkGuard {
-            let lock = TEST_LOCK.lock().unwrap();
+            let lock = TEST_LOCK
+                .lock()
+                .unwrap_or_else(|poison| poison.into_inner());
             *MOCK_NETWORK.lock().unwrap() = Some(self);
             MockNetworkGuard { _lock: lock }
         }
@@ -1114,7 +1124,7 @@ mod tests {
         assert!(outcome
             .logs
             .iter()
-            .any(|msg| msg.contains("Se mantiene el bloqueo aplicado")));
+            .any(|msg| msg.contains("Se alcanzó el número máximo de refuerzos automáticos")));
     }
 
     #[tokio::test]
