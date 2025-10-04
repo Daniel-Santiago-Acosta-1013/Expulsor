@@ -2,10 +2,12 @@
 
 use crate::app::state::AppState;
 use crate::domain::actions::AppAction;
+use crate::domain::capabilities::{BlockStrategy, CapabilityReport};
 use crate::domain::device::DeviceIdentity;
 use crate::domain::logs::{LogEntry, LogLevel};
 use crate::domain::settings::{ScanKind, Settings};
 use crate::infrastructure::network::arp::ArpSpoofer;
+use crate::infrastructure::network::capabilities;
 use crate::infrastructure::network::fingerprint::Fingerprinter;
 use crate::infrastructure::network::scanner::NetworkScanner;
 use crate::infrastructure::persistence::device_db::DeviceDatabase;
@@ -132,6 +134,13 @@ impl ServiceRegistry {
             },
             AppAction::ToggleAggressiveMode => {
                 let mut guard = state.lock().await;
+                if guard.settings.external_block_command.is_some() {
+                    guard.push_log(LogEntry::new(
+                        LogLevel::Info,
+                        "El comando externo de bloqueo está activo; el modo agresivo permanece deshabilitado",
+                    ));
+                    return Ok(());
+                }
                 guard.settings.aggressive_mode = !guard.settings.aggressive_mode;
                 let message = if guard.settings.aggressive_mode {
                     "Modo agresivo activado"
@@ -173,14 +182,32 @@ impl ServiceRegistry {
             }
         };
 
+        let capability_report = capabilities::evaluate().await;
+
         let mut guard = state.lock().await;
         guard.update_devices(map.values().cloned().collect());
         guard.clear_scan_in_progress();
+        guard.set_network_capabilities(capability_report.clone());
+        for note in &capability_report.diagnostics {
+            guard.push_log(LogEntry::new(LogLevel::Info, note.clone()));
+        }
+        let strategy_log = format!(
+            "Estrategia sugerida: {}",
+            capability_report.recommended.label()
+        );
+        guard.push_log(LogEntry::new(LogLevel::Info, strategy_log));
+        let adjustment_note = apply_strategy_to_settings(&mut guard.settings, &capability_report);
         guard.push_log(LogEntry::new(
             LogLevel::Info,
             format!("Escaneo {:?} completado ({} dispositivos)", mode, map.len()),
         ));
+        let settings = guard.settings.clone();
         drop(guard);
+        if let Some(note) = adjustment_note {
+            let mut guard = state.lock().await;
+            guard.push_log(LogEntry::new(LogLevel::Info, note));
+        }
+        self.spoofer.update_settings(settings).await;
         info!("Escaneo {:?} finalizado", mode);
         Ok(())
     }
@@ -215,13 +242,20 @@ impl ServiceRegistry {
             loop {
                 sleep(Duration::from_secs(5)).await;
 
-                let still_blocked = {
+                let (still_blocked, settings_snapshot) = {
                     let state_guard = state.lock().await;
-                    state_guard
+                    let blocked = state_guard
                         .devices
                         .iter()
-                        .any(|device| device.identity.ip == identity.ip && device.blocked)
+                        .any(|device| device.identity.ip == identity.ip && device.blocked);
+                    (blocked, state_guard.settings.clone())
                 };
+
+                if !settings_snapshot.block_mode && !settings_snapshot.poison_enabled {
+                    let mut guard = pending.lock().await;
+                    guard.remove(&ip);
+                    break;
+                }
 
                 if !still_blocked {
                     let mut guard = pending.lock().await;
@@ -281,5 +315,47 @@ impl ServiceRegistry {
                 }
             }
         });
+    }
+}
+
+fn apply_strategy_to_settings(
+    settings: &mut Settings,
+    report: &CapabilityReport,
+) -> Option<String> {
+    if settings.external_block_command.is_some() {
+        settings.block_mode = false;
+        settings.poison_enabled = false;
+        settings.aggressive_mode = false;
+        return Some("Se utilizará el comando externo configurado para bloquear".to_string());
+    }
+    match report.recommended {
+        BlockStrategy::Unsupported => {
+            settings.block_mode = false;
+            settings.poison_enabled = false;
+            settings.aggressive_mode = false;
+            settings.packet_interval_secs = 1.0;
+            Some("Sin capacidades: se desactiva bloqueo automático".to_string())
+        }
+        BlockStrategy::FirewallOnly => {
+            settings.block_mode = true;
+            settings.poison_enabled = false;
+            settings.aggressive_mode = false;
+            settings.packet_interval_secs = 1.0;
+            Some("Se utilizará únicamente firewall (sin ARP)".to_string())
+        }
+        BlockStrategy::BalancedArp => {
+            settings.block_mode = true;
+            settings.poison_enabled = true;
+            settings.aggressive_mode = false;
+            settings.packet_interval_secs = settings.packet_interval_secs.max(0.75);
+            Some("ARP moderado activado".to_string())
+        }
+        BlockStrategy::AggressiveArp => {
+            settings.block_mode = true;
+            settings.poison_enabled = true;
+            settings.aggressive_mode = true;
+            settings.packet_interval_secs = settings.packet_interval_secs.min(0.5);
+            Some("ARP agresivo habilitado".to_string())
+        }
     }
 }

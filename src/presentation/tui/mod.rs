@@ -6,13 +6,14 @@ pub mod theme;
 use crate::app::commands::CommandDispatcher;
 use crate::app::state::AppState;
 use crate::domain::actions::AppAction;
+use crate::domain::capabilities::CapabilityReport;
 use crate::domain::device::{DeviceRecord, DeviceStatus};
 use crate::domain::logs::LogLevel;
 use crate::domain::settings::ScanKind;
 use crate::presentation::tui::theme::Theme;
 use crate::utils::shutdown::ShutdownSignal;
 use anyhow::Result;
-use chrono::Utc;
+use chrono::{Local, Utc};
 use crossterm::cursor::Show;
 use crossterm::event::{self, Event, KeyCode, KeyModifiers};
 use crossterm::execute;
@@ -535,7 +536,14 @@ fn draw_details(
     let text = snapshot
         .devices
         .get(selected_index)
-        .map(|device| build_device_details(device, pending_blocks, loader_frame))
+        .map(|device| {
+            build_device_details(
+                device,
+                pending_blocks,
+                loader_frame,
+                snapshot.network_capabilities.as_ref(),
+            )
+        })
         .unwrap_or_else(|| Text::raw("No hay dispositivos detectados aun."));
 
     let paragraph = Paragraph::new(text).block(block).wrap(Wrap { trim: true });
@@ -570,7 +578,7 @@ fn draw_logs(
                 LogLevel::Warn => theme.warning,
                 LogLevel::Error => theme.error,
             };
-            let timestamp = entry.timestamp.format("%H:%M:%S");
+            let timestamp = entry.timestamp.with_timezone(&Local).format("%I:%M:%S %p");
             Line::from(vec![
                 Span::styled(format!("[{}] ", timestamp), theme.dimmed),
                 Span::styled(format!("{:?}", entry.level), level_style),
@@ -651,7 +659,10 @@ fn draw_status_bar(
     } else {
         let text = snapshot
             .last_refresh
-            .map(|ts| format!("Actualizado: {}", ts.format("%H:%M:%S")))
+            .map(|ts| {
+                let local = ts.with_timezone(&Local);
+                format!("Actualizado: {}", local.format("%I:%M:%S %p"))
+            })
             .unwrap_or_else(|| "Sin escaneos previos".to_string());
         Line::from(Span::styled(text, theme.dimmed))
     };
@@ -703,13 +714,26 @@ fn draw_header(
         "[PAUSE] Escaner inactivo".to_string()
     };
 
+    let capability_value = snapshot
+        .network_capabilities
+        .as_ref()
+        .map(|report| {
+            let mut text = report.summary();
+            if !report.interface_name.is_empty() {
+                text.push_str(&format!(" @{}", report.interface_name));
+            }
+            text
+        })
+        .unwrap_or_else(|| "Sin diagnostico".to_string());
+
     let cards = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([
-            Constraint::Percentage(25),
-            Constraint::Percentage(25),
-            Constraint::Percentage(25),
-            Constraint::Percentage(25),
+            Constraint::Percentage(20),
+            Constraint::Percentage(20),
+            Constraint::Percentage(20),
+            Constraint::Percentage(20),
+            Constraint::Percentage(20),
         ])
         .split(area);
 
@@ -722,7 +746,8 @@ fn draw_header(
     );
     draw_stat_card(frame, cards[1], "[ON] Activos", active.to_string(), theme);
     draw_stat_card(frame, cards[2], "[LOCK] Restringidos", blocked_value, theme);
-    draw_stat_card(frame, cards[3], "[SCAN] Estado", scan_text, theme);
+    draw_stat_card(frame, cards[3], "[NET] Estrategia", capability_value, theme);
+    draw_stat_card(frame, cards[4], "[SCAN] Estado", scan_text, theme);
 }
 
 fn draw_stat_card(
@@ -753,8 +778,21 @@ fn build_device_details(
     device: &DeviceRecord,
     pending_blocks: &HashMap<String, Instant>,
     loader_frame: Option<&str>,
+    capabilities: Option<&CapabilityReport>,
 ) -> Text<'static> {
     let mut lines = Vec::new();
+    if let Some(report) = capabilities {
+        lines.push(Line::from(vec![
+            Span::styled("[NET] ", Style::default().add_modifier(Modifier::BOLD)),
+            Span::raw(format!("{}", report.summary())),
+        ]));
+        if let Some(gateway) = report.gateway_ip {
+            lines.push(Line::from(vec![
+                Span::styled("[GW] ", Style::default().add_modifier(Modifier::BOLD)),
+                Span::raw(gateway.to_string()),
+            ]));
+        }
+    }
     lines.push(Line::from(vec![
         Span::styled("[IP] ", Style::default().add_modifier(Modifier::BOLD)),
         Span::raw(device.identity.ip.to_string()),

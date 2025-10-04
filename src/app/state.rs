@@ -1,5 +1,6 @@
 //! Representa el estado compartido de la aplicación accesible desde la TUI y los servicios.
 
+use crate::domain::capabilities::CapabilityReport;
 use crate::domain::device::{DeviceIdentity, DeviceRecord, DeviceStatus};
 use crate::domain::logs::LogEntry;
 use crate::domain::settings::{ScanKind, Settings};
@@ -18,6 +19,7 @@ pub struct AppState {
     pub settings: Settings,
     pub last_refresh: Option<DateTime<Utc>>,
     pub ongoing_scan: Option<ScanStatus>,
+    pub network_capabilities: Option<CapabilityReport>,
 }
 
 /// Información sobre un escaneo actualmente en progreso.
@@ -36,6 +38,7 @@ impl AppState {
             settings: Settings::default(),
             last_refresh: None,
             ongoing_scan: None,
+            network_capabilities: None,
         })
     }
 
@@ -51,6 +54,11 @@ impl AppState {
     pub fn update_devices(&mut self, devices: Vec<DeviceRecord>) {
         self.devices = devices;
         self.last_refresh = Some(Utc::now());
+    }
+
+    /// Registra el diagnóstico de capacidades de bloqueo detectado.
+    pub fn set_network_capabilities(&mut self, report: CapabilityReport) {
+        self.network_capabilities = Some(report);
     }
 
     /// Inserta o actualiza la información de un dispositivo individual.

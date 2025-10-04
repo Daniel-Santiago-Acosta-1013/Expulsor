@@ -49,6 +49,7 @@ impl MockNetwork {
         }
     }
 }
+use tokio::process::Command;
 use tokio::sync::Mutex;
 use tokio::task::JoinHandle;
 use tokio::time::sleep;
@@ -217,6 +218,13 @@ fn resolve_target_mac(context: &NetworkContext, target_ip: Ipv4Addr) -> Result<P
         "No se obtuvo la MAC del objetivo {} tras múltiples intentos",
         target_ip
     ))
+}
+
+fn substitute_command(template: &str, identity: &DeviceIdentity) -> String {
+    let mac = identity.mac.as_deref().unwrap_or("00:00:00:00:00:00");
+    template
+        .replace("{ip}", &identity.ip.to_string())
+        .replace("{mac}", mac)
 }
 
 fn build_arp_request(
@@ -511,7 +519,7 @@ async fn verify_blocking(target_ip: Ipv4Addr) -> Result<(bool, Vec<String>)> {
     logs.push(format!("Verificando restricción para {}", target_ip));
     sleep(Duration::from_secs(4)).await;
 
-    let mut command = tokio::process::Command::new("ping");
+    let mut command = Command::new("ping");
     if cfg!(target_os = "windows") {
         command.args(["-n", "1", &target_ip.to_string()]);
     } else {
@@ -609,12 +617,39 @@ impl ArpSpoofer {
             }
         };
 
+        if let Some(command) = settings.external_block_command.clone() {
+            let external = substitute_command(&command, identity);
+            logs.push(format!(
+                "Ejecutando comando externo de bloqueo: {}",
+                external
+            ));
+            let status = Command::new("sh").arg("-c").arg(&external).status().await?;
+            if status.success() {
+                logs.push("Bloqueo externo aplicado correctamente".to_string());
+                return Ok(BlockOutcome {
+                    logs,
+                    verified: true,
+                });
+            } else {
+                logs.push(format!(
+                    "Comando de bloqueo externo devolvió estado {}",
+                    status
+                ));
+            }
+        }
+
         logs.push(format!("Preparando entorno para {}", ipv4));
         let context = discover_network_context()?;
         logs.push(format!(
             "Interfaz predeterminada: {} - MAC local {}",
             context.interface_name, context.local_mac
         ));
+
+        if !settings.block_mode && !settings.poison_enabled {
+            return Err(anyhow!(
+                "No hay mecanismos de bloqueo activos en la configuración actual"
+            ));
+        }
 
         let target_mac = resolve_target_mac(&context, ipv4)?;
         logs.push(format!("MAC del objetivo {}: {}", ipv4, target_mac));
@@ -647,40 +682,88 @@ impl ArpSpoofer {
             logs.push("block_mode desactivado: reenvio IP sin cambios".to_string());
         }
 
-        let interval = default_interval(settings.packet_interval_secs);
-        let spoof_control = start_poison_session(
-            context.clone(),
-            ipv4,
-            target_mac,
-            settings.aggressive_mode,
-            interval,
-        )?;
-        logs.push("Sesión de ARP poisoning iniciada".to_string());
+        let mut spoof_control = None;
+        if settings.poison_enabled {
+            let interval = default_interval(settings.packet_interval_secs);
+            let control = start_poison_session(
+                context.clone(),
+                ipv4,
+                target_mac,
+                settings.aggressive_mode,
+                interval,
+            )?;
+            logs.push("Sesión de ARP poisoning iniciada".to_string());
+            spoof_control = Some(control);
+        } else {
+            logs.push("Envenenamiento ARP deshabilitado por configuración".to_string());
+        }
 
         let mut verified = !settings.block_mode;
         if settings.block_mode {
-            match verify_blocking(ipv4).await {
-                Ok((success, verification_logs)) => {
-                    logs.extend(verification_logs);
-                    verified = success;
-                    if !success {
+            const MAX_ENFORCEMENT_ATTEMPTS: usize = 2;
+            let mut attempt = 0;
+
+            loop {
+                match verify_blocking(ipv4).await {
+                    Ok((success, verification_logs)) => {
+                        logs.extend(verification_logs);
+                        if success {
+                            verified = true;
+                            break;
+                        }
                         logs.push(
-                            "Verificación fallida: el dispositivo respondió al ping. Se mantiene el bloqueo aplicado"
+                            "Verificación fallida: el dispositivo respondió al ping".to_string(),
+                        );
+                    }
+                    Err(err) => {
+                        logs.push(format!("No se pudo verificar la restricción: {}", err));
+                        verified = false;
+                        break;
+                    }
+                }
+
+                if attempt >= MAX_ENFORCEMENT_ATTEMPTS {
+                    logs.push(
+                        "Se alcanzó el número máximo de refuerzos automáticos; el bloqueo continuará en modo supervisado"
+                            .to_string(),
+                    );
+                    verified = false;
+                    break;
+                }
+
+                attempt += 1;
+                logs.push(format!(
+                    "Refuerzo adicional del bloqueo (intento {}/{})",
+                    attempt, MAX_ENFORCEMENT_ATTEMPTS
+                ));
+
+                match self.reverify(identity).await {
+                    Ok((success, mut extra_logs)) => {
+                        logs.append(&mut extra_logs);
+                        if success {
+                            verified = true;
+                            break;
+                        }
+                        logs.push(
+                            "El dispositivo sigue respondiendo tras el refuerzo; se realizará otro intento"
                                 .to_string(),
                         );
                     }
-                }
-                Err(err) => {
-                    logs.push(format!("No se pudo verificar la restricción: {}", err));
-                    verified = false;
+                    Err(err) => {
+                        logs.push(format!("Error reforzando el bloqueo: {}", err));
+                        verified = false;
+                        break;
+                    }
                 }
             }
         }
 
-        self.sessions
-            .lock()
-            .await
-            .insert(identity.ip.to_string(), spoof_control);
+        if let Some(control) = spoof_control {
+            self.sessions
+                .lock()
+                .await
+                .insert(identity.ip.to_string(), control);
+        }
 
         let mut guard = self.targets.lock().await;
         guard.insert(
@@ -711,6 +794,23 @@ impl ArpSpoofer {
         let settings = { self.settings.lock().await.clone() };
         let mut logs = Vec::new();
 
+        if let Some(command) = settings.external_block_command.clone() {
+            let mut logs = Vec::new();
+            let external = substitute_command(&command, identity);
+            logs.push(format!(
+                "Reejecutando comando externo de bloqueo: {}",
+                external
+            ));
+            let status = Command::new("sh").arg("-c").arg(&external).status().await?;
+            if status.success() {
+                logs.push("Bloqueo confirmado por comando externo".to_string());
+                return Ok((true, logs));
+            } else {
+                logs.push(format!("El comando externo devolvió estado {}", status));
+                logs.push("Se continuará con refuerzo local".to_string());
+            }
+        }
+
         if settings.block_mode {
             logs.push(format!("Reforzando firewall para {}", identity.ip));
             self.ensure_firewall_ready().await?;
@@ -720,44 +820,53 @@ impl ArpSpoofer {
             logs.push("block_mode desactivado: omitiendo refuerzo de firewall".to_string());
         }
 
-        let session_snapshot = {
-            let guard = self.sessions.lock().await;
-            guard.get(&identity.ip.to_string()).map(|control| {
-                (
-                    control.context.clone(),
-                    control.target_ip,
-                    control.target_mac,
-                )
-            })
-        };
+        if settings.poison_enabled {
+            let session_snapshot = {
+                let guard = self.sessions.lock().await;
+                guard.get(&identity.ip.to_string()).map(|control| {
+                    (
+                        control.context.clone(),
+                        control.target_ip,
+                        control.target_mac,
+                    )
+                })
+            };
 
-        if let Some((context, session_ip, session_mac)) = session_snapshot {
-            match tokio::task::spawn_blocking(move || {
-                reinforce_poisoning(context, session_ip, session_mac)
-            })
-            .await
-            {
-                Ok(Ok(mut extra_logs)) => logs.append(&mut extra_logs),
-                Ok(Err(err)) => logs.push(format!("No se pudo reforzar la sesión ARP: {}", err)),
-                Err(err) => logs.push(format!("Error interno reforzando ARP: {}", err)),
+            if let Some((context, session_ip, session_mac)) = session_snapshot {
+                match tokio::task::spawn_blocking(move || {
+                    reinforce_poisoning(context, session_ip, session_mac)
+                })
+                .await
+                {
+                    Ok(Ok(mut extra_logs)) => logs.append(&mut extra_logs),
+                    Ok(Err(err)) => {
+                        logs.push(format!("No se pudo reforzar la sesión ARP: {}", err))
+                    }
+                    Err(err) => logs.push(format!("Error interno reforzando ARP: {}", err)),
+                }
+            } else {
+                logs.push("No se encontró sesión ARP activa; se iniciará una nueva".to_string());
+                let context = discover_network_context()?;
+                let target_mac = resolve_target_mac(&context, ipv4)?;
+                let interval = default_interval(settings.packet_interval_secs);
+                let control = start_poison_session(
+                    context.clone(),
+                    ipv4,
+                    target_mac,
+                    settings.aggressive_mode,
+                    interval,
+                )?;
+                self.sessions
+                    .lock()
+                    .await
+                    .insert(identity.ip.to_string(), control);
+                logs.push("Sesión de ARP poisoning reactivada".to_string());
             }
         } else {
-            logs.push("No se encontró sesión ARP activa; se iniciará una nueva".to_string());
-            let context = discover_network_context()?;
-            let target_mac = resolve_target_mac(&context, ipv4)?;
-            let interval = default_interval(settings.packet_interval_secs);
-            let control = start_poison_session(
-                context.clone(),
-                ipv4,
-                target_mac,
-                settings.aggressive_mode,
-                interval,
-            )?;
-            self.sessions
-                .lock()
-                .await
-                .insert(identity.ip.to_string(), control);
-            logs.push("Sesión de ARP poisoning reactivada".to_string());
+            logs.push(
+                "Envenenamiento ARP deshabilitado: solo se refuerza la regla de firewall"
+                    .to_string(),
+            );
         }
 
         let (success, mut verification_logs) = verify_blocking(ipv4).await?;
@@ -768,6 +877,24 @@ impl ArpSpoofer {
     /// Detiene el bloqueo actual del dispositivo indicado.
     pub async fn unblock(&self, identity: &DeviceIdentity) -> Result<UnblockOutcome> {
         let mut logs = Vec::new();
+        if let Some(command) = self.settings.lock().await.external_unblock_command.clone() {
+            let external = substitute_command(&command, identity);
+            logs.push(format!(
+                "Ejecutando comando externo de desbloqueo: {}",
+                external
+            ));
+            let status = Command::new("sh").arg("-c").arg(&external).status().await?;
+            if status.success() {
+                logs.push("Desbloqueo externo aplicado".to_string());
+                return Ok(UnblockOutcome { logs });
+            } else {
+                logs.push(format!(
+                    "Comando de desbloqueo externo devolvió estado {}",
+                    status
+                ));
+                logs.push("Se intentará retirar bloqueo local".to_string());
+            }
+        }
         logs.push(format!("Quitando {} de la lista de expulsión", identity.ip));
         self.firewall.unblock(&identity.ip.to_string()).await?;
         logs.push("Regla de bloqueo retirada".to_string());

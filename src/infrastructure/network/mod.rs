@@ -1,6 +1,7 @@
 //! Servicios relacionados con comunicación de red y detección de dispositivos.
 
 pub mod arp;
+pub mod capabilities;
 pub mod fingerprint;
 pub mod interfaces;
 pub mod nmap;
