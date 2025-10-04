@@ -420,13 +420,7 @@ fn draw_main_content(
 
     draw_devices(frame, columns[0], snapshot, selected_index, focus, theme);
 
-    let info_layout = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([Constraint::Length(7), Constraint::Min(0)])
-        .split(columns[1]);
-
-    draw_summary(frame, info_layout[0], snapshot, theme);
-    draw_details(frame, info_layout[1], snapshot, theme, selected_index);
+    draw_details(frame, columns[1], snapshot, theme, selected_index);
     draw_logs(frame, logs_area, snapshot, focus, &mut log_scroll, theme);
     log_scroll
 }
@@ -450,70 +444,6 @@ fn draw_details(
 
     let paragraph = Paragraph::new(text).block(block).wrap(Wrap { trim: true });
     frame.render_widget(paragraph, area);
-}
-
-fn draw_summary(
-    frame: &mut ratatui::terminal::Frame<'_>,
-    area: Rect,
-    snapshot: &AppState,
-    theme: &Theme,
-) {
-    let total = snapshot.devices.len();
-    let blocked = snapshot
-        .devices
-        .iter()
-        .filter(|device| device.blocked)
-        .count();
-    let active = snapshot
-        .devices
-        .iter()
-        .filter(|device| !device.blocked && matches!(device.status, DeviceStatus::Active))
-        .count();
-    let mode_line = if let Some(status) = &snapshot.ongoing_scan {
-        let label = match status.mode {
-            ScanKind::Quick => "Escaneo rapido en curso",
-            ScanKind::Deep => "Escaneo profundo en curso",
-        };
-        Span::styled(format!("[SCAN] {}", label), theme.emphasis)
-    } else {
-        Span::styled("[PAUSE] Escaner inactivo", theme.dimmed)
-    };
-
-    let last_refresh = snapshot
-        .last_refresh
-        .map(|ts| ts.format("%d/%m %H:%M:%S").to_string())
-        .unwrap_or_else(|| "Nunca".to_string());
-
-    let mut warnings = Vec::new();
-    if blocked > 0 {
-        warnings.push(Span::styled(
-            format!("[LOCK] Restringidos: {}", blocked),
-            theme.warning,
-        ));
-    }
-
-    let lines = vec![
-        Line::from(vec![Span::styled("[INFO] Resumen", theme.emphasis)]),
-        Line::from(vec![
-            Span::styled("[DEV] Dispositivos: ", theme.dimmed),
-            Span::styled(format!("{}", total), theme.normal),
-            Span::raw("  "),
-            Span::styled("[ON] Activos: ", theme.dimmed),
-            Span::styled(format!("{}", active), theme.normal),
-        ]),
-        Line::from(vec![
-            Span::styled("[TIME] Ultimo escaneo: ", theme.dimmed),
-            Span::styled(last_refresh, theme.normal),
-        ]),
-        Line::from(vec![mode_line]),
-        Line::from(warnings),
-    ];
-
-    let block = Block::default()
-        .borders(Borders::ALL)
-        .title(Span::styled("Estado", theme.normal));
-
-    frame.render_widget(Paragraph::new(lines).block(block), area);
 }
 
 fn draw_logs(
