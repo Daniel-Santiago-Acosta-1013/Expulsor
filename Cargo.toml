@@ -48,6 +48,7 @@ quick-xml = { version = "0.36", features = ["serialize"] }
 signal-hook = "0.3"
 strum = { version = "0.25", features = ["derive"] }
 strum_macros = "0.25"
+libc = "0.2.177"
 
 [build-dependencies]
 vergen = { version = "8", features = ["git", "build", "rustc"] }
