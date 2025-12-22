@@ -37,13 +37,13 @@ sudo ./target/release/expulsor
 | Tecla                   | Acción                                                  |
 |------------------------|---------------------------------------------------------|
 | `r`                    | Escaneo rápido (ping/ARP + refresco incremental)        |
-| `Shift + R`            | Escaneo profundo (fingerprinting completo)              |
+| `Shift + R` / `Ctrl/Cmd + R` | Escaneo profundo (fingerprinting completo)        |
 | `Enter`                | Fingerprint detallado del dispositivo seleccionado      |
 | `b` / `u`              | Bloquear / restaurar el dispositivo actual              |
 | `a`                    | Alternar el modo agresivo de bloqueo                    |
 | `Tab`                  | Cambiar el panel activo (dispositivos / eventos)        |
 | `↑` / `↓`              | Navegar por la tabla o hacer scroll en el panel activo  |
-| `q`                    | Salir de la aplicación                                  |
+| `q` / `Ctrl + C`       | Salir de la aplicación                                  |
 
 La columna "Bloqueo" indica el estado del dispositivo (`Restringido` / `--`). El panel de eventos muestra en tiempo real los logs generados por los servicios.
 
