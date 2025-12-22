@@ -218,6 +218,9 @@ impl Tui {
                     .submit(AppAction::ToggleAggressiveMode)
                     .await?;
             }
+            (_, KeyCode::Char('c'), modifiers) if modifiers.contains(KeyModifiers::CONTROL) => {
+                self.shutdown.trigger();
+            }
             (FocusPane::Logs, KeyCode::Up, _) => {
                 self.ui.log_scroll = self.ui.log_scroll.saturating_sub(1);
             }

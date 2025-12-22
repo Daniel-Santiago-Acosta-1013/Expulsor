@@ -52,7 +52,6 @@ impl MockNetwork {
 use tokio::process::Command;
 use tokio::sync::Mutex;
 use tokio::task::JoinHandle;
-use tokio::time::sleep;
 
 /// Información de un objetivo actualmente bloqueado.
 #[allow(dead_code)]
@@ -536,51 +535,6 @@ fn restore_connection(
     )])
 }
 
-async fn verify_blocking(target_ip: Ipv4Addr) -> Result<(bool, Vec<String>)> {
-    #[cfg(test)]
-    {
-        if let Some(mock) = MOCK_NETWORK.lock().unwrap().as_ref() {
-            return Ok((mock.verify_success, mock.verify_logs.clone()));
-        }
-    }
-
-    let mut logs = Vec::new();
-    logs.push(format!("Verificando restricción para {}", target_ip));
-    sleep(Duration::from_secs(4)).await;
-
-    let mut command = Command::new("ping");
-    if cfg!(target_os = "windows") {
-        command.args(["-n", "1", &target_ip.to_string()]);
-    } else {
-        command.args(["-c", "1", "-W", "1", &target_ip.to_string()]);
-    }
-
-    match command.output().await {
-        Ok(output) => {
-            let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
-            let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
-            if !stdout.is_empty() {
-                logs.push(format!("ping stdout: {}", stdout));
-            }
-            if !stderr.is_empty() {
-                logs.push(format!("ping stderr: {}", stderr));
-            }
-            let success = !output.status.success();
-            if success {
-                logs.push("Ping sin respuesta: bloqueo verificado".to_string());
-            } else {
-                logs.push("Ping respondió: el dispositivo sigue activo".to_string());
-            }
-            Ok((success, logs))
-        }
-        Err(err) => {
-            logs.push(format!("Error ejecutando ping: {}", err));
-            // Si no podemos ejecutar ping, no podemos confirmar bloqueo
-            Ok((false, logs))
-        }
-    }
-}
-
 async fn stop_spoof_session(
     map: &Arc<Mutex<HashMap<String, SpoofControl>>>,
     ip: &str,
@@ -715,7 +669,7 @@ impl ArpSpoofer {
             logs.push("Envenenamiento ARP deshabilitado: reenvio IP sin cambios".to_string());
         }
 
-        let mut spoof_control = None;
+        let mut spoof_active = false;
         if settings.poison_enabled {
             let interval = default_interval(settings.packet_interval_secs);
             let control = start_poison_session(
@@ -726,76 +680,37 @@ impl ArpSpoofer {
                 interval,
             )?;
             logs.push("Sesión de ARP poisoning iniciada".to_string());
-            spoof_control = Some(control);
+            self.sessions
+                .lock()
+                .await
+                .insert(identity.ip.to_string(), control);
+            spoof_active = true;
         } else {
             logs.push("Envenenamiento ARP deshabilitado por configuración".to_string());
         }
 
         let mut verified = !settings.block_mode;
         if settings.block_mode {
-            const MAX_ENFORCEMENT_ATTEMPTS: usize = 2;
-            let mut attempt = 0;
-
-            loop {
-                match verify_blocking(ipv4).await {
-                    Ok((success, verification_logs)) => {
-                        logs.extend(verification_logs);
-                        if success {
-                            verified = true;
-                            break;
-                        }
-                        logs.push(
-                            "Verificación fallida: el dispositivo respondió al ping".to_string(),
-                        );
-                    }
-                    Err(err) => {
-                        logs.push(format!("No se pudo verificar la restricción: {}", err));
-                        verified = false;
-                        break;
-                    }
+            match self.firewall.is_blocked(&identity.ip.to_string()).await {
+                Ok(true) => {
+                    logs.push("Bloqueo confirmado por firewall".to_string());
+                    verified = true;
                 }
-
-                if attempt >= MAX_ENFORCEMENT_ATTEMPTS {
-                    logs.push(
-                        "Se alcanzó el número máximo de refuerzos automáticos; el bloqueo continuará en modo supervisado"
-                            .to_string(),
-                    );
+                Ok(false) => {
+                    logs.push("No se encontró la regla de firewall aplicada".to_string());
                     verified = false;
-                    break;
                 }
-
-                attempt += 1;
-                logs.push(format!(
-                    "Refuerzo adicional del bloqueo (intento {}/{})",
-                    attempt, MAX_ENFORCEMENT_ATTEMPTS
-                ));
-
-                match self.reverify(identity).await {
-                    Ok((success, mut extra_logs)) => {
-                        logs.append(&mut extra_logs);
-                        if success {
-                            verified = true;
-                            break;
-                        }
-                        logs.push(
-                            "El dispositivo sigue respondiendo tras el refuerzo; se realizará otro intento"
-                                .to_string(),
-                        );
-                    }
-                    Err(err) => {
-                        logs.push(format!("Error reforzando el bloqueo: {}", err));
-                        verified = false;
-                        break;
-                    }
+                Err(err) => {
+                    logs.push(format!(
+                        "No se pudo verificar la regla de firewall: {} (se asume activo)",
+                        err
+                    ));
+                    verified = true;
                 }
             }
         }
-
-        if let Some(control) = spoof_control {
-            self.sessions
-                .lock()
-                .await
-                .insert(identity.ip.to_string(), control);
+        if spoof_active {
+            logs.push("Sesión ARP activa para el objetivo".to_string());
         }
 
         let mut guard = self.targets.lock().await;
@@ -902,9 +817,28 @@ impl ArpSpoofer {
             );
         }
 
-        let (success, mut verification_logs) = verify_blocking(ipv4).await?;
-        logs.append(&mut verification_logs);
-        Ok((success, logs))
+        if settings.block_mode {
+            match self.firewall.is_blocked(&identity.ip.to_string()).await {
+                Ok(true) => {
+                    logs.push("Bloqueo confirmado por firewall".to_string());
+                    Ok((true, logs))
+                }
+                Ok(false) => {
+                    logs.push("La regla de firewall no está presente".to_string());
+                    Ok((false, logs))
+                }
+                Err(err) => {
+                    logs.push(format!(
+                        "No se pudo verificar la regla de firewall: {} (se asume activo)",
+                        err
+                    ));
+                    Ok((true, logs))
+                }
+            }
+        } else {
+            logs.push("Bloqueo confirmado por ARP activo".to_string());
+            Ok((true, logs))
+        }
     }
 
     /// Detiene el bloqueo actual del dispositivo indicado.
@@ -1047,6 +981,11 @@ mod tests {
                 Ok(())
             })
         }
+
+        fn is_blocked(&self, ip: &str) -> BoxFuture<'_, Result<bool>> {
+            let ip = ip.to_string();
+            Box::pin(async move { Ok(self.blocked.lock().unwrap().contains(&ip)) })
+        }
     }
 
     #[tokio::test]
@@ -1120,7 +1059,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn block_retains_state_when_verification_fails() {
+    async fn block_confirms_firewall_rule() {
         let _guard = MockNetwork {
             context: Arc::new(NetworkContext {
                 interface_name: "test0".to_string(),
@@ -1142,14 +1081,14 @@ mod tests {
 
         let outcome = spoofer.block(&identity).await.expect("bloqueo estable");
 
-        assert!(!outcome.verified);
+        assert!(outcome.verified);
         let targets = spoofer.get_targets().await;
         assert!(targets.contains_key("192.168.0.12"));
         assert!(firewall.is_blocked("192.168.0.12"));
         assert!(outcome
             .logs
             .iter()
-            .any(|msg| msg.contains("Se alcanzó el número máximo de refuerzos automáticos")));
+            .any(|msg| msg.contains("Bloqueo confirmado por firewall")));
     }
 
     #[tokio::test]

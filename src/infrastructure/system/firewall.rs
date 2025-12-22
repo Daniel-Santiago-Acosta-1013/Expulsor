@@ -11,6 +11,7 @@ pub trait FirewallDriver: Send + Sync {
     fn ensure_ready(&self) -> BoxFuture<'_, Result<()>>;
     fn block(&self, ip: &str) -> BoxFuture<'_, Result<()>>;
     fn unblock(&self, ip: &str) -> BoxFuture<'_, Result<()>>;
+    fn is_blocked(&self, ip: &str) -> BoxFuture<'_, Result<bool>>;
 }
 
 /// Implementación basada en las utilidades del sistema.
@@ -30,6 +31,11 @@ impl FirewallDriver for SystemFirewall {
     fn unblock(&self, ip: &str) -> BoxFuture<'_, Result<()>> {
         let ip = ip.to_string();
         Box::pin(async move { remove_rule(&ip).await })
+    }
+
+    fn is_blocked(&self, ip: &str) -> BoxFuture<'_, Result<bool>> {
+        let ip = ip.to_string();
+        Box::pin(async move { is_blocked(&ip).await })
     }
 }
 
@@ -130,6 +136,54 @@ pub async fn remove_rule(ip: &str) -> Result<()> {
     {
         let _ = ip;
         Ok(())
+    }
+}
+
+/// Comprueba si la IP indicada está bloqueada en el firewall del sistema.
+pub async fn is_blocked(ip: &str) -> Result<bool> {
+    #[cfg(target_os = "linux")]
+    {
+        let inbound = check_rule_linux("-s", ip).await?;
+        let outbound = check_rule_linux("-d", ip).await?;
+        return Ok(inbound && outbound);
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        return is_blocked_macos(ip).await;
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        let suffix = ip.replace('.', "_");
+        let out_rule = format!("name=ExpulsorBlockOut{}", suffix);
+        let in_rule = format!("name=ExpulsorBlockIn{}", suffix);
+        let out = Command::new("netsh")
+            .args(["advfirewall", "firewall", "show", "rule", &out_rule])
+            .output()
+            .await
+            .context("Error consultando regla de firewall (salida)")?;
+        let input = Command::new("netsh")
+            .args(["advfirewall", "firewall", "show", "rule", &in_rule])
+            .output()
+            .await
+            .context("Error consultando regla de firewall (entrada)")?;
+
+        let present = |output: &std::process::Output| {
+            if !output.status.success() {
+                return false;
+            }
+            let stdout = String::from_utf8_lossy(&output.stdout).to_ascii_lowercase();
+            !stdout.contains("no rules match")
+        };
+
+        return Ok(present(&out) && present(&input));
+    }
+
+    #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
+    {
+        let _ = ip;
+        Ok(false)
     }
 }
 
@@ -280,4 +334,17 @@ async fn remove_rule_macos(ip: &str) -> Result<()> {
         return Err(anyhow!("pfctl devolvió error al eliminar {}", ip));
     }
     Ok(())
+}
+
+#[cfg(target_os = "macos")]
+async fn is_blocked_macos(ip: &str) -> Result<bool> {
+    ensure_ready_macos().await?;
+    let status = Command::new("pfctl")
+        .args(["-q", "-t", "expulsor_blocklist", "-T", "test", ip])
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .await
+        .context("No se pudo consultar expulsor_blocklist")?;
+    Ok(status.success())
 }
