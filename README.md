@@ -1,6 +1,6 @@
 # Expulsor - Terminal Network Control Tool
 
-Expulsor es ahora una aplicación escrita íntegramente en Rust con una interfaz TUI inspirada en k9s. Permite descubrir dispositivos dentro de la red local, ejecutar fingerprinting avanzado con Nmap y restringir su tráfico desde una terminal, sin necesidad de argumentos de línea de comandos ni GUI.
+Expulsor es ahora una aplicación escrita íntegramente en Rust con una interfaz TUI enfocada en operación rápida desde terminal. Permite descubrir dispositivos dentro de la red local, ejecutar fingerprinting avanzado con Nmap y restringir su tráfico desde una terminal, sin necesidad de argumentos de línea de comandos ni GUI.
 
 ## Características principales
 

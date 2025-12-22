@@ -11,13 +11,13 @@ use tokio::process::Command;
 use tokio::task;
 
 #[cfg(not(test))]
-/// Activa el reenvío IP en la plataforma actual devolviendo el estado anterior.
-pub async fn enable() -> Result<Option<String>> {
+/// Desactiva el reenvío IP en la plataforma actual devolviendo el estado anterior.
+pub async fn disable() -> Result<Option<String>> {
     #[cfg(target_os = "linux")]
     {
         let previous = read_linux_forward().await?;
-        if previous.trim() != "1" {
-            write_linux_forward("1").await?;
+        if previous.trim() != "0" {
+            write_linux_forward("0").await?;
         }
         Ok(Some(previous))
     }
@@ -31,12 +31,12 @@ pub async fn enable() -> Result<Option<String>> {
             .context("No se pudo leer sysctl net.inet.ip.forwarding")?;
         let previous = String::from_utf8_lossy(&status.stdout).trim().to_string();
         Command::new("sysctl")
-            .args(["-w", "net.inet.ip.forwarding=1"])
+            .args(["-w", "net.inet.ip.forwarding=0"])
             .stdout(Stdio::null())
             .stderr(Stdio::null())
             .status()
             .await
-            .context("No se pudo habilitar ip forwarding")?;
+            .context("No se pudo deshabilitar ip forwarding")?;
         Ok(Some(previous))
     }
 
@@ -113,20 +113,20 @@ use std::sync::Mutex;
 static FORWARDING_STATE: Lazy<Mutex<bool>> = Lazy::new(|| Mutex::new(false));
 
 #[cfg(test)]
-pub async fn enable() -> Result<Option<String>> {
+pub async fn restore(previous: Option<String>) -> Result<()> {
+    let mut guard = FORWARDING_STATE.lock().unwrap();
+    *guard = previous.as_deref() == Some("1");
+    Ok(())
+}
+
+#[cfg(test)]
+pub async fn disable() -> Result<Option<String>> {
     let mut guard = FORWARDING_STATE.lock().unwrap();
     let previous = if *guard {
         Some("1".to_string())
     } else {
         Some("0".to_string())
     };
-    *guard = true;
+    *guard = false;
     Ok(previous)
-}
-
-#[cfg(test)]
-pub async fn restore(previous: Option<String>) -> Result<()> {
-    let mut guard = FORWARDING_STATE.lock().unwrap();
-    *guard = previous.as_deref() == Some("1");
-    Ok(())
 }
